@@ -165,28 +165,33 @@ static void wcd9378_class_load(struct snd_soc_component *component)
 {
 	int i;
 
-	snd_soc_component_update_bits(component, WCD9378_SMP_AMP_FUNC_ACT,
-				      0x01, 0x01);
+	/*
+	 * Plain writes, not update_bits, so the 0->1 activation edge
+	 * always reaches the hardware regardless of regcache state.
+	 * The engine boots from this edge only on a freshly reset
+	 * codec; once it dies (bus clock-stop) no register write
+	 * revives it, see the TX bus PM hold in wcd9378_bind().
+	 */
+	snd_soc_component_write(component, WCD9378_SMP_AMP_FUNC_ACT, 0x00);
+	snd_soc_component_write(component, WCD9378_SMP_AMP_FUNC_ACT, 0x01);
 	usleep_range(20000, 20010);
-	snd_soc_component_update_bits(component, WCD9378_SMP_AMP_FUNC_STAT,
-				      0xff, 0xff);
+	snd_soc_component_write(component, WCD9378_SMP_AMP_FUNC_STAT, 0xff);
 
-	snd_soc_component_update_bits(component, WCD9378_SMP_JACK_FUNC_ACT,
-				      0x01, 0x01);
+	snd_soc_component_write(component, WCD9378_SMP_JACK_FUNC_ACT, 0x00);
+	snd_soc_component_write(component, WCD9378_SMP_JACK_FUNC_ACT, 0x01);
 	usleep_range(30000, 30010);
 	snd_soc_component_update_bits(component, WCD9378_CMT_GRP_MASK,
 				      0xff, 0x02);
-	snd_soc_component_update_bits(component, WCD9378_SMP_JACK_FUNC_STAT,
-				      0xff, 0xff);
+	snd_soc_component_write(component, WCD9378_SMP_JACK_FUNC_STAT, 0xff);
 
 	for (i = 0; i < 3; i++) {
-		snd_soc_component_update_bits(component,
-					      WCD9378_SMP_MIC_FUNC_ACT(i),
-					      0x01, 0x01);
+		snd_soc_component_write(component,
+					WCD9378_SMP_MIC_FUNC_ACT(i), 0x00);
+		snd_soc_component_write(component,
+					WCD9378_SMP_MIC_FUNC_ACT(i), 0x01);
 		usleep_range(5000, 5010);
-		snd_soc_component_update_bits(component,
-					      WCD9378_SMP_MIC_FUNC_STAT(i),
-					      0xff, 0xff);
+		snd_soc_component_write(component,
+					WCD9378_SMP_MIC_FUNC_STAT(i), 0xff);
 	}
 }
 
@@ -1219,10 +1224,26 @@ static int wcd9378_bind(struct device *dev)
 		goto err_remove_link3;
 	}
 
+	/*
+	 * The SDCA function engine dies when the TX bus enters clock-stop
+	 * and only a codec reset revives it — registers keep their values
+	 * so a regcache sync or a FUNC_ACT re-toggle does not help. The
+	 * downstream stack sidesteps the same problem by marking the TX
+	 * SoundWire master "qcom,is-always-on"; do the equivalent and
+	 * keep the TX slave (and thus its bus) runtime-active while the
+	 * codec is bound.
+	 */
+	ret = pm_runtime_resume_and_get(wcd9378->txdev);
+	if (ret < 0 && ret != -EACCES) {
+		dev_err(dev, "could not resume TX device\n");
+		goto err_remove_link3;
+	}
+
 	ret = snd_soc_register_component(dev, &soc_codec_dev_wcd9378,
 					 wcd9378_dais, ARRAY_SIZE(wcd9378_dais));
 	if (ret) {
 		dev_err(dev, "Codec registration failed\n");
+		pm_runtime_put(wcd9378->txdev);
 		goto err_remove_link3;
 	}
 
@@ -1248,6 +1269,7 @@ static void wcd9378_unbind(struct device *dev)
 	struct wcd9378_priv *wcd9378 = dev_get_drvdata(dev);
 
 	snd_soc_unregister_component(dev);
+	pm_runtime_put(wcd9378->txdev);
 	device_link_remove(dev, wcd9378->txdev);
 	device_link_remove(dev, wcd9378->rxdev);
 	device_link_remove(wcd9378->rxdev, wcd9378->txdev);
