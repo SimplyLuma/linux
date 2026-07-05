@@ -2431,6 +2431,15 @@ config SND_SOC_WCD937X_SDW
 	  via soundwire.
 	  To compile this codec driver say Y or m.
 
+config SND_SOC_WCD9378_SDW
+	tristate "WCD9378 Codec - SDW (bring-up skeleton)"
+	depends on SOUNDWIRE
+	select REGMAP_SOUNDWIRE
+	help
+	  Bring-up skeleton driver for the Qualcomm WCD9378 audio codec
+	  connected via SoundWire, as found on SM7635 phones.
+	  To compile this codec driver say Y or m.
+
 config SND_SOC_WCD938X
 	depends on SND_SOC_WCD938X_SDW
 	tristate
