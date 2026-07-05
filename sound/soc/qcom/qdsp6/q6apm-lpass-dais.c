@@ -224,6 +224,21 @@ static int q6apm_lpass_dai_prepare(struct snd_pcm_substream *substream, struct s
 		dev_err(dai->dev, "Failed to prepare Graph %d\n", rc);
 		goto err;
 	}
+
+	/*
+	 * Start the port already at prepare, like q6afe does: this starts
+	 * the interface clocks before the DAPM power-up sequence runs, so
+	 * codecs that need a live BCLK at power-up (e.g. aw88261) can
+	 * start synchronously. The trigger callback keeps its start as a
+	 * no-op fallback via is_port_started.
+	 */
+	rc = q6apm_graph_start(dai_data->graph[dai->id]);
+	if (rc < 0) {
+		dev_err(dai->dev, "Failed to start APM port %d\n", dai->id);
+		goto err;
+	}
+	dai_data->is_port_started[dai->id] = true;
+
 	return 0;
 err:
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
