@@ -209,12 +209,33 @@
 	sound {
 		compatible = "qcom,milos-sndcard", "qcom,sm8450-sndcard";
 		model = "Fairphone (Gen. 6)";
-		// audio-routing = ...
+		audio-routing = "AMIC1", "MIC BIAS1",
+				"AMIC2", "MIC BIAS2",
+				"AMIC3", "MIC BIAS3",
+				"TX SWR_INPUT0", "ADC1_OUTPUT",
+				"TX SWR_INPUT1", "ADC2_OUTPUT",
+				"TX SWR_INPUT2", "ADC3_OUTPUT";
 
 		pinctrl-0 = <&lpi_i2s2_active>;
 		pinctrl-1 = <&lpi_i2s2_sleep>;
 		pinctrl-names = "default",
 				"sleep";
+
+		wcd-capture-dai-link {
+			link-name = "WCD Capture";
+
+			codec {
+				sound-dai = <&wcd9378 1>, <&swr2 0>, <&lpass_txmacro 0>;
+			};
+
+			cpu {
+				sound-dai = <&q6apmbedai TX_CODEC_DMA_TX_3>;
+			};
+
+			platform {
+				sound-dai = <&q6apm>;
+			};
+		};
 
 		i2s-dai-link {
 			link-name = "Senary MI2S Playback";
@@ -231,6 +252,29 @@
 				sound-dai = <&q6apm>;
 			};
 		};
+	};
+
+	wcd9378: audio-codec {
+		compatible = "qcom,wcd9378-codec";
+
+		pinctrl-0 = <&wcd_reset_n_active>;
+		pinctrl-names = "default";
+
+		reset-gpios = <&tlmm 162 GPIO_ACTIVE_LOW>;
+
+		vdd-buck-supply = <&vreg_l8b>;
+		vdd-rxtx-supply = <&vreg_l7b>;
+		vdd-io-supply = <&vreg_l7b>;
+		vdd-mic-bias-supply = <&vreg_bob>;
+
+		qcom,micbias1-microvolt = <1800000>;
+		qcom,micbias2-microvolt = <1800000>;
+		qcom,micbias3-microvolt = <1800000>;
+
+		qcom,rx-device = <&wcd9378_rx>;
+		qcom,tx-device = <&wcd9378_tx>;
+
+		#sound-dai-cells = <1>;
 	};
 
 	thermal-zones {
@@ -1208,6 +1252,7 @@
 	wcd9378_rx: codec@0,4 {
 		compatible = "sdw20217011000";
 		reg = <0 4>;
+		qcom,rx-port-mapping = <1 2 3 4 5>;
 	};
 };
 
@@ -1218,6 +1263,15 @@
 	wcd9378_tx: codec@0,3 {
 		compatible = "sdw20217011000";
 		reg = <0 3>;
+
+		/*
+		 * WCD9378 TX port 1 (ADC1)          <=> SWR2 port 1 (SWRM_TX1)
+		 * WCD9378 TX port 2 (ADC2)          <=> SWR2 port 1
+		 * WCD9378 TX port 3 (ADC3)          <=> SWR2 port 1
+		 * WCD9378 TX port 4 (DMIC0,1, MBHC) <=> SWR2 port 2
+		 * WCD9378 TX port 5 (DMIC2..5)      <=> SWR2 port 3
+		 */
+		qcom,tx-port-mapping = <1 1 1 2 3>;
 	};
 };
 
@@ -1347,6 +1401,13 @@
 		function = "mdp_vsync";
 		drive-strength = <2>;
 		bias-pull-down;
+	};
+
+	wcd_reset_n_active: wcd-reset-n-active-state {
+		pins = "gpio162";
+		function = "gpio";
+		drive-strength = <16>;
+		output-high;
 	};
 };
 
