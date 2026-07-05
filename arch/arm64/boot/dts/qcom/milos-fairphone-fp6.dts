@@ -1201,6 +1201,26 @@
 	};
 };
 
+&swr1 {
+	status = "okay";
+
+	/* WCD9378 RX */
+	wcd9378_rx: codec@0,4 {
+		compatible = "sdw20217011000";
+		reg = <0 4>;
+	};
+};
+
+&swr2 {
+	status = "okay";
+
+	/* WCD9378 TX */
+	wcd9378_tx: codec@0,3 {
+		compatible = "sdw20217011000";
+		reg = <0 3>;
+	};
+};
+
 &tlmm {
 	gpio-reserved-ranges = <8 4>, /* Fingerprint SPI */
 			       <13 1>, /* NC */
