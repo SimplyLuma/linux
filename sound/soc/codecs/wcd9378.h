@@ -128,11 +128,15 @@
 
 /*
  * Raw (16-bit, non-paged) Qualcomm slave SCP registers, written with
- * sdw_write() directly. Bus clock indication towards the codec.
+ * sdw_write() directly. Bus clock indication towards the codec and
+ * SDCA interrupt type configuration.
  */
 #define WCD9378_SWRS_SCP_BASE_CLK		0x4d
 #define WCD9378_SWRS_SCP_BUSCLK_SCALE_BANK0	0x62
 #define WCD9378_SWRS_SCP_BUSCLK_SCALE_BANK1	0x72
+#define WCD9378_SWRS_SCP_SDCA_INTRTYPE_1	0xf4
+#define WCD9378_SWRS_SCP_SDCA_INTRTYPE_2	0xf8
+#define WCD9378_SWRS_SCP_SDCA_INTRTYPE_3	0xfc
 #define WCD9378_SWRS_SCP_HOST_CLK_DIV2_CTL(m)	(0xe0 + 0x10 * (m))
 #define WCD9378_SWRS_BASE_CLK_19P2MHZ		0x01
 #define WCD9378_SWRS_CLK_SCALE_DIV2		0x02	/* 9.6 MHz */
@@ -231,9 +235,9 @@ int wcd9378_sdw_hw_params(struct wcd9378_sdw_priv *wcd,
 			  struct snd_soc_dai *dai);
 #else
 static inline int wcd9378_sdw_hw_params(struct wcd9378_sdw_priv *wcd,
-			  struct snd_pcm_substream *substream,
-			  struct snd_pcm_hw_params *params,
-			  struct snd_soc_dai *dai)
+					struct snd_pcm_substream *substream,
+					struct snd_pcm_hw_params *params,
+					struct snd_soc_dai *dai)
 {
 	return -EOPNOTSUPP;
 }

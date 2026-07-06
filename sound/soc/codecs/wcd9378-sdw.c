@@ -299,7 +299,12 @@ static bool wcd9378_volatile_register(struct device *dev, unsigned int reg)
 	case WCD9378_SEQ_TX0_STAT:
 	case WCD9378_SEQ_TX1_STAT:
 	case WCD9378_SEQ_TX2_STAT:
+	case WCD9378_SMP_AMP_FUNC_STAT:
+	case WCD9378_SMP_JACK_FUNC_STAT:
 	case WCD9378_SMP_JACK_PDE34_ACT_PS:
+	case WCD9378_SMP_MIC_FUNC_STAT(0):
+	case WCD9378_SMP_MIC_FUNC_STAT(1):
+	case WCD9378_SMP_MIC_FUNC_STAT(2):
 	case WCD9378_SMP_MIC_OT10_USAGE(0):
 	case WCD9378_SMP_MIC_PDE11_ACT_PS(0):
 	case WCD9378_SMP_MIC_OT10_USAGE(1):
@@ -364,8 +369,7 @@ static int wcd9378_sdw_probe(struct sdw_slave *pdev,
 	wcd->sdev = pdev;
 	dev_set_drvdata(dev, wcd);
 
-	pdev->prop.scp_int1_mask = SDW_SCP_INT1_IMPL_DEF |
-				   SDW_SCP_INT1_BUS_CLASH |
+	pdev->prop.scp_int1_mask = SDW_SCP_INT1_BUS_CLASH |
 				   SDW_SCP_INT1_PARITY;
 	pdev->prop.lane_control_support = true;
 	pdev->prop.simple_clk_stop_capable = true;
@@ -377,6 +381,8 @@ static int wcd9378_sdw_probe(struct sdw_slave *pdev,
 	if (wcd->is_tx) {
 		master_ch_mask_size = of_property_count_u8_elems(dev->of_node,
 								 "qcom,tx-channel-mapping");
+		master_ch_mask_size = min_t(int, master_ch_mask_size,
+					    ARRAY_SIZE(wcd9378_sdw_tx_ch_info));
 
 		if (master_ch_mask_size > 0)
 			ret = of_property_read_u8_array(dev->of_node,
@@ -386,6 +392,8 @@ static int wcd9378_sdw_probe(struct sdw_slave *pdev,
 	} else {
 		master_ch_mask_size = of_property_count_u8_elems(dev->of_node,
 								 "qcom,rx-channel-mapping");
+		master_ch_mask_size = min_t(int, master_ch_mask_size,
+					    ARRAY_SIZE(wcd9378_sdw_rx_ch_info));
 
 		if (master_ch_mask_size > 0)
 			ret = of_property_read_u8_array(dev->of_node,
