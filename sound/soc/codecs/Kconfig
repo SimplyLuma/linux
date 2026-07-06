@@ -301,6 +301,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_WCD9335
 	imply SND_SOC_WCD934X
 	imply SND_SOC_WCD937X_SDW
+	imply SND_SOC_WCD9378_SDW
 	imply SND_SOC_WCD938X_SDW
 	imply SND_SOC_WCD939X_SDW
 	imply SND_SOC_LPASS_MACRO_COMMON
@@ -2443,8 +2444,10 @@ config SND_SOC_WCD9378_SDW
 	depends on SOUNDWIRE
 	select REGMAP_SOUNDWIRE
 	help
-	  Driver for the Qualcomm WCD9378 audio codec connected via
-	  SoundWire, as found on SM7635 phones.
+	  The WCD9378 is an audio codec IC connected to the host over
+	  SoundWire, found on Qualcomm SM7635 boards such as the
+	  Fairphone 6. It has three ADCs for analog microphones, mic
+	  bias supplies, headphone/earpiece outputs and MBHC.
 	  To compile this codec driver say Y or m.
 
 config SND_SOC_WCD938X
