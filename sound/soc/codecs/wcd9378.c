@@ -145,7 +145,12 @@ static const struct wcd9378_smp_fn wcd9378_smp_jack_adc2 = {
 	.act_reg = WCD9378_SMP_JACK_PDE34_ACT_PS,
 };
 
-static const DECLARE_TLV_DB_SCALE(analog_gain, 0, 25, 1);
+/*
+ * Measured acoustically on the FP6: the TX gain field steps 1.5 dB per
+ * code (+6 dB per 4 codes, +30 dB over the full 0..20 range). The
+ * wcd937x-family drivers claim 0.25 dB steps for the same field.
+ */
+static const DECLARE_TLV_DB_SCALE(analog_gain, 0, 150, 0);
 
 static int wcd9378_reset(struct wcd9378_priv *wcd9378)
 {
