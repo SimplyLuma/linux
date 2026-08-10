@@ -652,7 +652,11 @@
 
 &cci0_i2c1 {
 	/* Awinic AW86017 VCM @ 0x0c */
-	/* UW cam: OmniVision OV13B10 @ 0x36 */
+	ov13b10_vcm: focus@c {
+		compatible = "dongwoon,dw9714";
+		reg = <0x0c>;
+		vcc-supply = <&vreg_uw_afvdd_2p8>;
+	};
 
 	eeprom@52 {
 		compatible = "puya,p24c128f", "atmel,24c128";
@@ -660,6 +664,41 @@
 		vcc-supply = <&vreg_l6p>;
 		read-only;
 	};
+
+	/* UW cam: OmniVision OV13B10 @ 0x36 */
+	camera@36 {
+		compatible = "ovti,ov13b10";
+		reg = <0x36>;
+
+		clocks = <&camcc CAM_CC_MCLK1_CLK>;
+		assigned-clocks = <&camcc CAM_CC_MCLK1_CLK>;
+		assigned-clock-rates = <19200000>;
+
+		avdd-supply = <&vreg_l4p>;
+		dovdd-supply = <&vreg_l6p>;
+		dvdd-supply = <&vreg_uw_dvdd>;
+
+		reset-gpios = <&tlmm 41 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&cam_mclk1_default &ov13b10_reset_default>;
+
+		orientation = <1>;
+		rotation = <270>;
+
+		lens-focus = <&ov13b10_vcm>;
+
+		port {
+			ov13b10_ep: endpoint {
+				remote-endpoint = <&csiphy1_ep>;
+				data-lanes = <0 1 2 3>;
+				link-frequencies = /bits/ 64 <560000000>;
+			};
+		};
+	};
+};
+
+&camss {
+	status = "okay";
 };
 
 &cci1 {
