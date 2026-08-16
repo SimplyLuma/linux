@@ -1353,7 +1353,8 @@ int a6xx_gmu_resume(struct a6xx_gpu *a6xx_gpu)
 	a6xx_gmu_gxpd_get(gmu);
 
 	/* Use a known rate to bring up the GMU */
-	clk_set_rate(gmu->core_clk, 200000000);
+	clk_set_rate(gmu->core_clk,
+		     adreno_is_a810(adreno_gpu) ? 650000000 : 200000000);
 	clk_set_rate(gmu->hub_clk, adreno_is_a740_family(adreno_gpu) ?
 		     200000000 : 150000000);
 	ret = clk_bulk_prepare_enable(gmu->nr_clocks, gmu->clocks);
