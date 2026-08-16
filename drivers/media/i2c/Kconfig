@@ -939,6 +939,17 @@ config VIDEO_DW9768
 	  capability. This is designed for linear control of
 	  voice coil motors, controlled via I2C serial interface.
 
+config VIDEO_DW9784
+	tristate "DW9784 OIS/AF controller support"
+	select V4L2_CCI_I2C
+	help
+	  This is a driver for the Dongwoon Anatech DW9784 camera
+	  OIS/AF controller. Only the autofocus channel is driven;
+	  the OIS servo is held centered with stabilization off.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called dw9784.
+
 config VIDEO_DW9807_VCM
 	tristate "DW9807 lens voice coil support"
 	help
