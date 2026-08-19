@@ -31,14 +31,14 @@
 	}
 
 /*
- * Each ADC sits alone on its own TX device port (channel 1); by default
- * they land on channels 1/2/3 of the same master port (SWRM_TX1 on the
- * FP6). DMIC/MBHC masks per the downstream qcom,tx_swr_ch_map.
+ * Each ADC sits alone on its own TX device port (channel 1) and lands on
+ * channel 1 of the corresponding master port. This matches the FP6 analog
+ * routing policy. DMIC/MBHC masks follow the downstream channel map.
  */
 static struct wcd_sdw_ch_info wcd9378_sdw_tx_ch_info[] = {
 	WCD9378_SDW_CH(WCD9378_ADC1, WCD9378_ADC_1_PORT, BIT(0), BIT(0)),
-	WCD9378_SDW_CH(WCD9378_ADC2, WCD9378_ADC_2_PORT, BIT(0), BIT(1)),
-	WCD9378_SDW_CH(WCD9378_ADC3, WCD9378_ADC_3_PORT, BIT(0), BIT(2)),
+	WCD9378_SDW_CH(WCD9378_ADC2, WCD9378_ADC_2_PORT, BIT(0), BIT(0)),
+	WCD9378_SDW_CH(WCD9378_ADC3, WCD9378_ADC_3_PORT, BIT(0), BIT(0)),
 	WCD9378_SDW_CH(WCD9378_DMIC0, WCD9378_DMIC_0_1_MBHC_PORT, BIT(2), BIT(0)),
 	WCD9378_SDW_CH(WCD9378_DMIC1, WCD9378_DMIC_0_1_MBHC_PORT, BIT(3), BIT(1)),
 	WCD9378_SDW_CH(WCD9378_MBHC, WCD9378_DMIC_0_1_MBHC_PORT, BIT(2), BIT(2)),
