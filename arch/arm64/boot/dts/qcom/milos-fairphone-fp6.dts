@@ -1266,12 +1266,12 @@
 
 		/*
 		 * WCD9378 TX port 1 (ADC1)          <=> SWR2 port 1 (SWRM_TX1)
-		 * WCD9378 TX port 2 (ADC2)          <=> SWR2 port 1
-		 * WCD9378 TX port 3 (ADC3)          <=> SWR2 port 1
+		 * WCD9378 TX port 2 (ADC2)          <=> SWR2 port 2 (SWRM_TX2)
+		 * WCD9378 TX port 3 (ADC3)          <=> SWR2 port 3 (SWRM_TX3)
 		 * WCD9378 TX port 4 (DMIC0,1, MBHC) <=> SWR2 port 2
 		 * WCD9378 TX port 5 (DMIC2..5)      <=> SWR2 port 3
 		 */
-		qcom,tx-port-mapping = <1 1 1 2 3>;
+		qcom,tx-port-mapping = <1 2 3 2 3>;
 	};
 };
 
