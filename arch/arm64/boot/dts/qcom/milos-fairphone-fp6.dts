@@ -216,7 +216,6 @@
 		pinctrl-names = "default",
 				"sleep";
 
-		/*
 		i2s-dai-link {
 			link-name = "Senary MI2S Playback";
 
@@ -232,7 +231,6 @@
 				sound-dai = <&q6apm>;
 			};
 		};
-		*/
 	};
 
 	thermal-zones {
