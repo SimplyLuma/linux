@@ -213,7 +213,7 @@
 				"AMIC2", "MIC BIAS2",
 				"AMIC3", "MIC BIAS3",
 				"TX SWR_INPUT0", "ADC1_OUTPUT",
-				"TX SWR_INPUT1", "ADC2_OUTPUT",
+				"TX SWR_INPUT4", "ADC2_OUTPUT",
 				"TX SWR_INPUT2", "ADC3_OUTPUT";
 
 		pinctrl-0 = <&lpi_i2s2_active>;
