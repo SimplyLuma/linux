@@ -50,7 +50,7 @@
 #define DPS310_CFG_REG		0x09
 #define  DPS310_INT_HL		BIT(7)
 #define  DPS310_TMP_SHIFT_EN	BIT(3)
-#define  DPS310_PRS_SHIFT_EN	BIT(4)
+#define  DPS310_PRS_SHIFT_EN	BIT(2)
 #define  DPS310_FIFO_EN		BIT(5)
 #define  DPS310_SPI_EN		BIT(6)
 #define DPS310_RESET		0x0c
@@ -80,13 +80,30 @@ static const int scale_factors[] = {
 	2088960,
 };
 
+/*
+ * The Goertek SPL07-003 is a derivative of the DPS310. Differences the
+ * driver must know about are held here: the SPL07 calibration adds the
+ * c31 and c40 pressure coefficients (COEF region grows from 18 to 21
+ * bytes), TMP_CFG bit 7 is part of a wider rate field rather than the
+ * temperature sensor select, and the DPS310 temperature-misread errata
+ * does not apply.
+ */
+struct dps310_chip_info {
+	const char *name;
+	unsigned int num_coef_bytes;
+	bool temp_ext;
+	bool temp_workaround;
+};
+
 struct dps310_data {
 	struct i2c_client *client;
 	struct regmap *regmap;
 	struct mutex lock;	/* Lock for sequential HW access functions */
+	const struct dps310_chip_info *chip;
 
 	s32 c0, c1;
 	s32 c00, c10, c20, c30, c01, c11, c21;
+	s32 c31, c40;
 	s32 pressure_raw;
 	s32 temp_raw;
 	bool timeout_recovery_failed;
@@ -111,13 +128,14 @@ static const struct iio_chan_spec dps310_channels[] = {
 static int dps310_get_coefs(struct dps310_data *data)
 {
 	int rc;
-	u8 coef[18];
+	u8 coef[21];
 	u32 c0, c1;
 	u32 c00, c10, c20, c30, c01, c11, c21;
+	u32 c31, c40;
 
 	/* Read all sensor calibration coefficients from the COEF registers. */
 	rc = regmap_bulk_read(data->regmap, DPS310_COEF_BASE, coef,
-			      sizeof(coef));
+			      data->chip->num_coef_bytes);
 	if (rc < 0)
 		return rc;
 
@@ -157,6 +175,15 @@ static int dps310_get_coefs(struct dps310_data *data)
 	c30 = (coef[16] << 8) | coef[17];
 	data->c30 = sign_extend32(c30, 15);
 
+	/* SPL07-003 carries two more coefficients, 12 bit 2's complement */
+	if (data->chip->num_coef_bytes > 18) {
+		c31 = (coef[18] << 4) | (coef[19] >> 4);
+		data->c31 = sign_extend32(c31, 11);
+
+		c40 = ((coef[19] & GENMASK(3, 0)) << 8) | coef[20];
+		data->c40 = sign_extend32(c40, 11);
+	}
+
 	return 0;
 }
 
@@ -169,6 +196,9 @@ static int dps310_temp_workaround(struct dps310_data *data)
 {
 	int rc;
 	int reg;
+
+	if (!data->chip->temp_workaround)
+		return 0;
 
 	rc = regmap_read(data->regmap, 0x32, &reg);
 	if (rc < 0)
@@ -214,10 +244,13 @@ static int dps310_startup(struct dps310_data *data)
 		return rc;
 
 	/*
-	 * Set up external (MEMS) temperature sensor in single sample, one
-	 * measurement per second mode
+	 * Set up the temperature sensor in single sample, one measurement
+	 * per second mode. On the DPS310 select the external (MEMS) sensor;
+	 * on the SPL07-003 bit 7 is part of the rate field instead and there
+	 * is no sensor select at this position.
 	 */
-	rc = regmap_write(data->regmap, DPS310_TMP_CFG, DPS310_TMP_EXT);
+	rc = regmap_write(data->regmap, DPS310_TMP_CFG,
+			  data->chip->temp_ext ? DPS310_TMP_EXT : 0);
 	if (rc)
 		return rc;
 
@@ -628,6 +661,75 @@ static int dps310_write_raw(struct iio_dev *iio,
 	return rc;
 }
 
+/*
+ * The SPL07-003 pressure polynomial has two terms more than the DPS310's:
+ *
+ *   P(Pa) = c00 + Praw_sc * (c10 + Praw_sc * (c20 + Praw_sc * (c30
+ *             + Praw_sc * c40)))
+ *         + Traw_sc * (c01 + Praw_sc * (c11 + Praw_sc * (c21
+ *             + Praw_sc * c31)))
+ *
+ * The DPS310 term-by-term scheme cannot be extended to the 4th-order
+ * term: Praw^4 * c40 overflows s64. Praw_sc and Traw_sc are <= 1 in
+ * magnitude over the calibrated range, so evaluate with Horner's method
+ * in Q39 fixed point instead, where every intermediate stays well inside
+ * s64 (the scaled ratios are clamped to |2| to keep that true for
+ * out-of-range raw values).
+ */
+static int dps310_calculate_pressure_spl07(struct dps310_data *data, int *val)
+{
+	int rc;
+	int t_ready;
+	int kpi;
+	int kti;
+	s64 ps;
+	s64 ts;
+	s64 p;
+	s64 t;
+
+	rc = dps310_get_pres_k(data, &kpi);
+	if (rc)
+		return rc;
+
+	rc = dps310_get_temp_k(data, &kti);
+	if (rc)
+		return rc;
+
+	/* Refresh temp if it's ready, otherwise just use the latest value */
+	if (mutex_trylock(&data->lock)) {
+		rc = regmap_read(data->regmap, DPS310_MEAS_CFG, &t_ready);
+		if (rc >= 0 && t_ready & DPS310_TMP_RDY)
+			dps310_read_temp_ready(data);
+
+		mutex_unlock(&data->lock);
+	}
+
+	ps = div_s64((s64)data->pressure_raw << 39, kpi);
+	ps = clamp_t(s64, ps, -(2LL << 39), 2LL << 39);
+	ts = div_s64((s64)data->temp_raw << 39, kti);
+	ts = clamp_t(s64, ts, -(2LL << 39), 2LL << 39);
+
+	p = data->c40;
+	p = ((p * ps) >> 39) + data->c30;
+	p = ((p * ps) >> 39) + data->c20;
+	p = ((p * ps) >> 39) + data->c10;
+	p = ((p * ps) >> 39) + data->c00;
+
+	t = data->c31;
+	t = ((t * ps) >> 39) + data->c21;
+	t = ((t * ps) >> 39) + data->c11;
+	t = ((t * ps) >> 39) + data->c01;
+
+	p += (t * ts) >> 39;
+
+	if (p < 0LL)
+		return -ERANGE;
+
+	*val = (int)min_t(s64, p, INT_MAX);
+
+	return 0;
+}
+
 static int dps310_calculate_pressure(struct dps310_data *data, int *val)
 {
 	int i;
@@ -728,7 +830,10 @@ static int dps310_read_pressure(struct dps310_data *data, int *val, int *val2,
 		if (rc)
 			return rc;
 
-		rc = dps310_calculate_pressure(data, val);
+		if (data->chip->num_coef_bytes > 18)
+			rc = dps310_calculate_pressure_spl07(data, val);
+		else
+			rc = dps310_calculate_pressure(data, val);
 		if (rc)
 			return rc;
 
@@ -843,6 +948,18 @@ static const struct iio_info dps310_info = {
 	.write_raw = dps310_write_raw,
 };
 
+static const struct dps310_chip_info dps310_chip_info = {
+	.name = DPS310_DEV_NAME,
+	.num_coef_bytes = 18,
+	.temp_ext = true,
+	.temp_workaround = true,
+};
+
+static const struct dps310_chip_info spl07_003_chip_info = {
+	.name = "spl07-003",
+	.num_coef_bytes = 21,
+};
+
 static int dps310_probe(struct i2c_client *client)
 {
 	struct dps310_data *data;
@@ -857,7 +974,11 @@ static int dps310_probe(struct i2c_client *client)
 	data->client = client;
 	mutex_init(&data->lock);
 
-	iio->name = DPS310_DEV_NAME;
+	data->chip = i2c_get_match_data(client);
+	if (!data->chip)
+		data->chip = &dps310_chip_info;
+
+	iio->name = data->chip->name;
 	iio->channels = dps310_channels;
 	iio->num_channels = ARRAY_SIZE(dps310_channels);
 	iio->info = &dps310_info;
@@ -886,10 +1007,18 @@ static int dps310_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id dps310_id[] = {
-	{ .name = DPS310_DEV_NAME },
+	{ .name = DPS310_DEV_NAME, .driver_data = (kernel_ulong_t)&dps310_chip_info },
+	{ .name = "spl07-003", .driver_data = (kernel_ulong_t)&spl07_003_chip_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, dps310_id);
+
+static const struct of_device_id dps310_of_match[] = {
+	{ .compatible = "infineon,dps310", .data = &dps310_chip_info },
+	{ .compatible = "goertek,spl07-003", .data = &spl07_003_chip_info },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, dps310_of_match);
 
 static const struct acpi_device_id dps310_acpi_match[] = {
 	{ "IFX3100" },
@@ -900,6 +1029,7 @@ MODULE_DEVICE_TABLE(acpi, dps310_acpi_match);
 static struct i2c_driver dps310_driver = {
 	.driver = {
 		.name = DPS310_DEV_NAME,
+		.of_match_table = dps310_of_match,
 		.acpi_match_table = dps310_acpi_match,
 	},
 	.probe = dps310_probe,

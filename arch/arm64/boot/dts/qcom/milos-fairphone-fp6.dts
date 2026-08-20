@@ -27,6 +27,89 @@
 		serial1 = &uart11;
 	};
 
+	/*
+	 * The sensor I2C bus sits on TLMM eGPIO pads that have no AP QUP
+	 * function; on the stock OS it is driven by an island QUP of the
+	 * Snapdragon Sensor Core (ADSP). From the AP the pads are only
+	 * usable as software GPIOs, so bit-bang the bus.
+	 * Devices on the bus: QMC6308 magnetometer @ 0x2c, SPL07
+	 * barometer @ 0x76, STK36C61 ALS/proximity @ 0x48.
+	 */
+	i2c-sensors {
+		compatible = "i2c-gpio";
+		sda-gpios = <&tlmm 153 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&tlmm 154 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <2>;
+		pinctrl-0 = <&sensor_i2c_default>;
+		pinctrl-names = "default";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		magnetometer@2c {
+			compatible = "qstcorp,qmc6308";
+			reg = <0x2c>;
+			vdd-supply = <&vreg_l10b>;
+			mount-matrix = "0", "-1", "0",
+				       "1", "0", "0",
+				       "0", "0", "1";
+		};
+
+		light-sensor@48 {
+			compatible = "sensortek,stk36c61", "sensortek,stk3310";
+			reg = <0x48>;
+		};
+
+		pressure-sensor@76 {
+			compatible = "goertek,spl07-003";
+			reg = <0x76>;
+			vdd-supply = <&vreg_l10b>;
+			vddio-supply = <&vreg_l10b>;
+		};
+	};
+
+	/*
+	 * Like the sensor I2C bus above, the IMU SPI bus sits on eGPIO
+	 * pads owned by the Sensor Core island QUP on the stock OS, so
+	 * bit-bang it. The ICM-42630 also answers I2C on the same pads
+	 * (0x68/0x69 with CS held high), but downstream runs it as
+	 * 4-wire SPI and all four pads are wired.
+	 */
+	spi-imu {
+		compatible = "spi-gpio";
+		sck-gpios = <&tlmm 157 GPIO_ACTIVE_HIGH>;
+		mosi-gpios = <&tlmm 156 GPIO_ACTIVE_HIGH>;
+		miso-gpios = <&tlmm 155 GPIO_ACTIVE_HIGH>;
+		cs-gpios = <&tlmm 158 GPIO_ACTIVE_LOW>;
+		num-chipselects = <1>;
+		pinctrl-0 = <&imu_spi_default>;
+		pinctrl-names = "default";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		imu@0 {
+			compatible = "invensense,icm42630", "invensense,icm42631";
+			reg = <0>;
+			spi-max-frequency = <9600000>;
+			interrupts-extended = <&tlmm 72 IRQ_TYPE_EDGE_RISING>;
+			interrupt-names = "INT1";
+			pinctrl-0 = <&imu_int_default>;
+			pinctrl-names = "default";
+			vdd-supply = <&vreg_l10b>;
+			vddio-supply = <&vreg_l10b>;
+			/*
+			 * x/y signs follow iio-sensor-proxy's convention
+			 * (upright device reads 1g on -y): the vendor
+			 * registry .orient maps sensor (x,y,z) to device
+			 * (x,-y,-z) in the Android reaction-force frame,
+			 * which is x/y-negated relative to what
+			 * iio-sensor-proxy expects.
+			 */
+			mount-matrix = "-1", "0", "0",
+				       "0", "1", "0",
+				       "0", "0", "-1";
+		};
+	};
+
 	gpio-keys {
 		compatible = "gpio-keys";
 
@@ -1279,6 +1362,30 @@
 	gpio-reserved-ranges = <8 4>, /* Fingerprint SPI */
 			       <13 1>, /* NC */
 			       <63 2>; /* WLAN UART */
+
+	imu_int_default: imu-int-default-state {
+		/* INT1, push-pull active-high */
+		pins = "gpio72";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	imu_spi_default: imu-spi-default-state {
+		/* MISO, MOSI, CLK, CS_N */
+		pins = "gpio155", "gpio156", "gpio157", "gpio158";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	sensor_i2c_default: sensor-i2c-default-state {
+		/* SDA, SCL; external pull-ups to vreg_l10b */
+		pins = "gpio153", "gpio154";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
 
 	ts_active: ts-irq-active-state {
 		pins = "gpio19";

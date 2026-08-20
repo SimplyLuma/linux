@@ -74,10 +74,10 @@ static const struct spi_device_id inv_icm42600_id[] = {
 	{ "icm42600", INV_CHIP_ICM42600 },
 	{ "icm42602", INV_CHIP_ICM42602 },
 	{ "icm42605", INV_CHIP_ICM42605 },
-	{ "icm42686", INV_CHIP_ICM42686 },
 	{ "icm42622", INV_CHIP_ICM42622 },
-	{ "icm42688", INV_CHIP_ICM42688 },
 	{ "icm42631", INV_CHIP_ICM42631 },
+	{ "icm42686", INV_CHIP_ICM42686 },
+	{ "icm42688", INV_CHIP_ICM42688 },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, inv_icm42600_id);
@@ -93,17 +93,17 @@ static const struct of_device_id inv_icm42600_of_matches[] = {
 		.compatible = "invensense,icm42605",
 		.data = (void *)INV_CHIP_ICM42605,
 	}, {
-		.compatible = "invensense,icm42686",
-		.data = (void *)INV_CHIP_ICM42686,
-	}, {
 		.compatible = "invensense,icm42622",
 		.data = (void *)INV_CHIP_ICM42622,
 	}, {
-		.compatible = "invensense,icm42688",
-		.data = (void *)INV_CHIP_ICM42688,
-	}, {
 		.compatible = "invensense,icm42631",
 		.data = (void *)INV_CHIP_ICM42631,
+	}, {
+		.compatible = "invensense,icm42686",
+		.data = (void *)INV_CHIP_ICM42686,
+	}, {
+		.compatible = "invensense,icm42688",
+		.data = (void *)INV_CHIP_ICM42688,
 	},
 	{ }
 };
