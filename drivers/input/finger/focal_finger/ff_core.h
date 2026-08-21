@@ -145,8 +145,11 @@ typedef struct {
     ff_driver_config_t ff_config;
     int irq_num;
     int irq_gpio;
+    struct gpio_desc *irq_gpiod;
     int reset_gpio;
+    struct gpio_desc *reset_gpiod;
     int vdd_gpio;
+    struct gpio_desc *vdd_gpiod;
     bool b_use_regulator;
     bool b_use_pinctrl;
     bool b_irq_enabled;
