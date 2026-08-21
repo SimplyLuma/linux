@@ -2560,9 +2560,16 @@ int qcom_scm_qseecom_app_load(void *img, size_t mdt_len, size_t img_len,
 
 	desc.args[2] = img_phys;
 
+	dev_info(__scm->dev,
+		 "qseecom: bounded app load: mdt_len=%zu img_len=%zu\n",
+		 mdt_len, img_len);
 	status = qcom_scm_qseecom_call(&desc, &res);
-	if (status)
+	if (status) {
+		dev_err(__scm->dev,
+			"qseecom: bounded app load transport failure: status=%d result=%llu type=%llu data=%llu\n",
+			status, res.result, res.resp_type, res.data);
 		return status;
+	}
 
 	if (res.result != QSEECOM_RESULT_SUCCESS) {
 		dev_dbg(__scm->dev,

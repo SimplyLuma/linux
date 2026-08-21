@@ -100,8 +100,10 @@ static int qcom_tzmem_init(void)
 	if (ret == -EOPNOTSUPP)
 		goto notsupp;
 
-	if (!ret)
+	if (!ret) {
 		qcom_tzmem_using_shm_bridge = true;
+		dev_info(qcom_tzmem_dev, "SHM Bridge enabled\n");
+	}
 
 	return ret;
 
@@ -175,6 +177,8 @@ static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
 	ret = qcom_tzmem_shm_bridge_create(area->paddr, area->size, handle);
 	if (ret)
 		return ret;
+
+	dev_info(qcom_tzmem_dev, "SHM Bridge area ready: size=%zu\n", area->size);
 
 	area->priv = no_free_ptr(handle);
 
