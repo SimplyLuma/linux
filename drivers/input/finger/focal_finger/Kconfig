@@ -5,11 +5,12 @@
 
 config FINGER_FOCAL
 	tristate "FINGER FOCAL fingerprint"
+	depends on INPUT_FINGERPRINT
 	help
 	  Say Y here if you have a FINGER FOCAL fingerprint and want to enable
-	  support for the built-in touchscreen.
+	  its normal-world power, reset, and interrupt control shim.
 
 	  If unsure, say N.
 
 	  To compile this driver as a module, choose M here: the
-	  module will be called FINGER_FOCAL.
+	  module will be called focaltech_fp.
