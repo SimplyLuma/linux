@@ -127,7 +127,7 @@ typedef struct {
     struct wakeup_source *p_ws;
     struct wakeup_source *p_ws_ctl;
 
-#if defined(CONFIG_FB)
+#if defined(CONFIG_FB) && defined(FB_EVENT_BLANK)
     struct notifier_block fb_notif;
 #endif
 

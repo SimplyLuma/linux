@@ -1243,7 +1243,7 @@ static int ff_register_device(ff_context_t *ff_ctx)
 }
 
 /*screen on/off callback*/
-#if defined(CONFIG_FB)
+#if defined(CONFIG_FB) && defined(FB_EVENT_BLANK)
 static int fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
 {
     struct fb_event *evdata = data;
@@ -1359,7 +1359,7 @@ static int ff_probe(struct platform_device *pdev)
 
     if (ff_ctx->b_screen_onoff_event) {
         ff_ctx->b_screen_on = true;
-#if defined(CONFIG_FB)
+#if defined(CONFIG_FB) && defined(FB_EVENT_BLANK)
         ff_ctx->fb_notif.notifier_call = fb_notifier_callback;
         ret = fb_register_client(&ff_ctx->fb_notif);
         if (ret) FF_LOGE("Unable to register fb_notifier,ret=%d", ret);
@@ -1415,7 +1415,7 @@ static void ff_unprobe(ff_context_t *ff_ctx)
         cancel_work_sync(&ff_ctx->event_work);
 
         if (ff_ctx->b_screen_onoff_event) {
-#if defined(CONFIG_FB)
+#if defined(CONFIG_FB) && defined(FB_EVENT_BLANK)
             fb_unregister_client(&ff_ctx->fb_notif);
 #endif
         }
