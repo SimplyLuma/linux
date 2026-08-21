@@ -800,8 +800,7 @@ static ssize_t ff_irq_show(struct device *dev, struct device_attribute *attr, ch
 
     FF_LOGV("'%s' enter.", __func__);
     if (ff_ctx && (ff_ctx->irq_num > 0) && ff_ctx->b_driver_inited) {
-        struct irq_desc *desc = irq_to_desc(ff_ctx->irq_num);
-        count = snprintf(buf, PAGE_SIZE, "irq_depth:%d\n", desc->depth);
+        count = snprintf(buf, PAGE_SIZE, "irq_enabled:%d\n", ff_ctx->b_irq_enabled);
     }
     FF_LOGV("'%s' leave.", __func__);
     return count;
