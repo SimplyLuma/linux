@@ -4,12 +4,13 @@
 #
 menuconfig INPUT_FINGERPRINT
 	bool "Fingerprint"
-	default y
+	default n
+	depends on OF && GPIOLIB
 	help
-	  Say Y here, and a list of supported Fingerprint will be displayed.
-	  This option doesn't affect the kernel.
+	  Say Y here to expose fingerprint sensor drivers. Authentication also
+	  requires a reviewed userspace backend and secure matching policy.
 
-	  If unsure, say Y.
+	  If unsure, say N.
 
 if INPUT_FINGERPRINT
 

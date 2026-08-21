@@ -675,9 +675,9 @@ static long ff_ctl_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
     return ret;
 }
 
-static unsigned int ff_ctl_poll(struct file *filp, struct poll_table_struct *wait)
+static __poll_t ff_ctl_poll(struct file *filp, struct poll_table_struct *wait)
 {
-    unsigned int mask = 0;
+    __poll_t mask = 0;
     ff_context_t *ff_ctx = filp->private_data;
 
     FF_LOGV("'%s' enter.", __func__);
@@ -1200,8 +1200,18 @@ static int ff_register_irq(ff_context_t *ff_ctx)
         FF_LOGI("irq_num:%d", ff_ctx->irq_num);
         irqflags = IRQF_TRIGGER_RISING | IRQF_ONESHOT;
         ret = request_irq(ff_ctx->irq_num, ff_irq_handler, irqflags, FF_DRV_NAME, ff_ctx);
+        if (ret < 0) {
+            FF_LOGE("request_irq(%d) failed,ret=%d", ff_ctx->irq_num, ret);
+            return ret;
+        }
         ff_ctx->b_irq_enabled = true;
-        enable_irq_wake(ff_ctx->irq_num);
+        ret = enable_irq_wake(ff_ctx->irq_num);
+        if (ret < 0) {
+            FF_LOGE("enable_irq_wake(%d) failed,ret=%d", ff_ctx->irq_num, ret);
+            free_irq(ff_ctx->irq_num, ff_ctx);
+            ff_ctx->irq_num = -1;
+            ff_ctx->b_irq_enabled = false;
+        }
     } else {
         FF_LOGE("irq_num:%d is invalid", ff_ctx->irq_num);
         ret = ff_ctx->irq_num;
@@ -1235,7 +1245,7 @@ static int ff_register_device(ff_context_t *ff_ctx)
     }
     FF_LOGD("ff devno:%x, %x", (int)ff_devno, (int)ff_ctx->ff_cdev.dev);
 
-    ff_ctx->ff_class = class_create(THIS_MODULE, FF_DRV_NAME);
+    ff_ctx->ff_class = class_create(FF_DRV_NAME);
     if (IS_ERR(ff_ctx->ff_class)) {
         ret = PTR_ERR(ff_ctx->ff_class);
         FF_LOGE("create ff class fails,ret=%d", ret);
@@ -1434,43 +1444,23 @@ static void ff_unprobe(ff_context_t *ff_ctx)
     FF_LOGI("'%s' leave.", __func__);
 }
 
-static int ff_remove(struct platform_device *pdev)
+static void ff_remove(struct platform_device *pdev)
 {
     ff_context_t *ff_ctx = platform_get_drvdata(pdev);
 
     FF_LOGI("'%s' enter.", __func__);
     if (ff_ctx && ff_ctx->b_ff_probe) {
+        ff_unprobe(ff_ctx);
         device_destroy(ff_ctx->ff_class, ff_ctx->ff_cdev.dev);
         class_destroy(ff_ctx->ff_class);
         cdev_del(&ff_ctx->ff_cdev);
         unregister_chrdev_region(ff_ctx->ff_cdev.dev, 1);
-
-        sysfs_remove_group(&pdev->dev.kobj, &ff_attrs_group);
-
-        /* De-init the wake lock. */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
-        wakeup_source_trash(&ff_ctx->wake_lock);
-        wakeup_source_trash(&ff_ctx->wake_lock_ctl);
-        ff_ctx->p_ws = NULL;
-        ff_ctx->p_ws_ctl = NULL;
-#else
-        wakeup_source_unregister(ff_ctx->p_ws);
-        wakeup_source_unregister(ff_ctx->p_ws_ctl);
-#endif
-        cancel_work_sync(&ff_ctx->event_work);
-
-        if (ff_ctx->b_screen_onoff_event) {
-#if defined(CONFIG_FB)
-            fb_unregister_client(&ff_ctx->fb_notif);
-#endif
-        }
-
         platform_set_drvdata(pdev, NULL);
+        if (g_ff_ctx == ff_ctx)
+            g_ff_ctx = NULL;
         kfree(ff_ctx);
-        ff_ctx = NULL;
     }
     FF_LOGI("'%s' leave.", __func__);
-    return 0;
 }
 
 static const struct of_device_id ff_dt_match[] = {

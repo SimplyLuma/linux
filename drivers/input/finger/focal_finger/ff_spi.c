@@ -459,7 +459,7 @@ static int ff_spi_probe(struct spi_device *spi)
     return 0;
 }
 
-static int ff_spi_remove(struct spi_device *spi)
+static void ff_spi_remove(struct spi_device *spi)
 {
     struct ff_spi_context *spi_ctx = spi_get_drvdata(spi);
 
@@ -475,7 +475,6 @@ static int ff_spi_remove(struct spi_device *spi)
 
     spi_set_drvdata(spi, NULL);
     FF_LOGI("'%s' leave.", __func__);
-    return 0;
 }
 
 static const struct of_device_id ff_spi_dt_match[] = {
