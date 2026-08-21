@@ -126,6 +126,7 @@ enum qcom_scm_qseecom_tz_cmd_app {
 };
 
 enum qcom_scm_qseecom_tz_cmd_listener {
+	QSEECOM_TZ_CMD_LISTENER_REGISTER_SMCINVOKE = 6,
 	QSEECOM_TZ_CMD_LISTENER_REGISTER	= 1,
 	QSEECOM_TZ_CMD_LISTENER_DEREGISTER	= 2,
 	QSEECOM_TZ_CMD_LISTENER_RESPONSE	= 3,
@@ -2334,7 +2335,7 @@ int qcom_scm_qseecom_listener_register(struct qcom_scm_qseecom_listener *listene
 
 	desc.owner = QSEECOM_TZ_OWNER_QSEE_OS;
 	desc.svc = QSEECOM_TZ_SVC_LISTENER;
-	desc.cmd = QSEECOM_TZ_CMD_LISTENER_REGISTER;
+	desc.cmd = QSEECOM_TZ_CMD_LISTENER_REGISTER_SMCINVOKE;
 	desc.arginfo = QCOM_SCM_ARGS(3, QCOM_SCM_VAL, QCOM_SCM_RW,
 				     QCOM_SCM_VAL);
 	desc.args[0] = listener->id;
@@ -2349,6 +2350,15 @@ int qcom_scm_qseecom_listener_register(struct qcom_scm_qseecom_listener *listene
 	}
 
 	status = __qcom_scm_qseecom_call(&desc, &res);
+	if (status == -EIO) {
+		/*
+		 * Older QSEE versions predate the session-aware listener call.
+		 * Follow Qualcomm's published negotiation and retry only when
+		 * the modern SCM command itself is unsupported.
+		 */
+		desc.cmd = QSEECOM_TZ_CMD_LISTENER_REGISTER;
+		status = __qcom_scm_qseecom_call(&desc, &res);
+	}
 	if (!status && res.result != QSEECOM_RESULT_SUCCESS)
 		status = -EIO;
 	if (!status)
