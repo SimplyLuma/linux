@@ -30,6 +30,7 @@
 #include <linux/reset-controller.h>
 #include <linux/remoteproc.h>
 #include <linux/sizes.h>
+#include <linux/sysfs.h>
 #include <linux/types.h>
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
@@ -61,6 +62,9 @@ struct qcom_scm {
 
 	struct qcom_tzmem_pool *mempool;
 	unsigned int wq_cnt;
+	void *qsee_log;
+	size_t qsee_log_size;
+	struct bin_attribute qsee_log_attr;
 };
 
 struct qcom_scm_current_perm_info {
@@ -123,6 +127,7 @@ enum qcom_scm_qseecom_tz_cmd_app {
 	QSEECOM_TZ_CMD_APP_SEND			= 1,
 	QSEECOM_TZ_CMD_APP_SHUTDOWN		= 2,
 	QSEECOM_TZ_CMD_APP_LOOKUP		= 3,
+	QSEECOM_TZ_CMD_QSEE_LOG_REGISTER	= 6,
 };
 
 enum qcom_scm_qseecom_tz_cmd_listener {
@@ -140,6 +145,8 @@ enum qcom_scm_qseecom_tz_cmd_info {
 
 #define QSEECOM_MAX_APP_NAME_SIZE		64
 #define SHMBRIDGE_RESULT_NOTSUPP		4
+
+#define QSEECOM_QSEE_LOG_SIZE			SZ_32K
 
 /* Each bit configures cold/warm boot address for one of the 4 CPUs */
 static const u8 qcom_scm_cpu_cold_bits[QCOM_SCM_BOOT_MAX_CPUS] = {
@@ -2762,6 +2769,76 @@ static int qcom_scm_qseecom_tee_init(struct qcom_scm *scm)
 					tee_dev);
 }
 
+static ssize_t qcom_scm_qsee_log_read(struct file *file,
+				       struct kobject *kobj,
+				       const struct bin_attribute *attr,
+				       char *buf, loff_t off, size_t count)
+{
+	struct qcom_scm *scm = container_of(attr, struct qcom_scm,
+					    qsee_log_attr);
+
+	if (off < 0)
+		return -EINVAL;
+	if (off >= scm->qsee_log_size)
+		return 0;
+
+	count = min_t(size_t, count, scm->qsee_log_size - off);
+	dma_rmb();
+	memcpy(buf, (u8 *)scm->qsee_log + off, count);
+
+	return count;
+}
+
+static int qcom_scm_qsee_log_init(struct qcom_scm *scm)
+{
+	struct qcom_scm_res res = {};
+	struct qcom_scm_desc desc = {
+		.owner = QSEECOM_TZ_OWNER_QSEE_OS,
+		.svc = QSEECOM_TZ_SVC_APP_MGR,
+		.cmd = QSEECOM_TZ_CMD_QSEE_LOG_REGISTER,
+		.arginfo = QCOM_SCM_ARGS(2, QCOM_SCM_RW, QCOM_SCM_VAL),
+	};
+	phys_addr_t phys;
+	int ret;
+
+	if (!of_property_read_bool(scm->dev->of_node,
+				   "luma,qsee-log-diagnostic"))
+		return 0;
+
+	scm->qsee_log_size = QSEECOM_QSEE_LOG_SIZE;
+	scm->qsee_log = qcom_tzmem_alloc(scm->mempool, scm->qsee_log_size,
+					 GFP_KERNEL);
+	if (!scm->qsee_log)
+		return -ENOMEM;
+
+	memset(scm->qsee_log, 0, scm->qsee_log_size);
+	phys = qcom_tzmem_to_phys(scm->qsee_log);
+	if (!phys)
+		return -EINVAL;
+
+	desc.args[0] = phys;
+	desc.args[1] = scm->qsee_log_size;
+	ret = qcom_scm_call(scm->dev, &desc, &res);
+	if (ret)
+		return ret;
+	if (res.result[0])
+		return -EIO;
+
+	sysfs_bin_attr_init(&scm->qsee_log_attr);
+	scm->qsee_log_attr.attr.name = "qsee_log";
+	scm->qsee_log_attr.attr.mode = 0400;
+	scm->qsee_log_attr.size = scm->qsee_log_size;
+	scm->qsee_log_attr.read = qcom_scm_qsee_log_read;
+	ret = device_create_bin_file(scm->dev, &scm->qsee_log_attr);
+	if (ret)
+		return ret;
+
+	dev_info(scm->dev,
+		 "qseecom: root-only QSEE diagnostic log registered: size=%zu\n",
+		 scm->qsee_log_size);
+	return 0;
+}
+
 static int qcom_scm_qseecom_init(struct qcom_scm *scm)
 {
 	struct platform_device *qseecom_dev;
@@ -3304,6 +3381,9 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	 */
 	ret = qcom_scm_qseecom_init(scm);
 	WARN(ret < 0, "failed to initialize qseecom: %d\n", ret);
+
+	ret = qcom_scm_qsee_log_init(scm);
+	WARN(ret < 0, "failed to initialize QSEE diagnostic log: %d\n", ret);
 
 	/* Initialize the QTEE object interface. */
 	qcom_scm_qtee_init(scm);
