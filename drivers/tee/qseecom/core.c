@@ -34,6 +34,8 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/of.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
@@ -140,6 +142,13 @@ struct qseecom_tee_supp {
  */
 struct qseecom_tee {
 	struct device *dev;
+	struct device *ta_mem_dev;
+	struct device *apps_mem_dev;
+	phys_addr_t ta_mem_base;
+	size_t ta_mem_size;
+	phys_addr_t apps_mem_base;
+	size_t apps_mem_size;
+	bool dedicated_heaps;
 	struct tee_device *teedev;
 	struct tee_device *supp_teedev;
 	struct tee_shm_pool *pool;
@@ -149,6 +158,26 @@ struct qseecom_tee {
 	u32 next_app_gen;
 	struct list_head apps;
 };
+
+static struct device *
+qseecom_tee_configure_tzmem_pool(struct qseecom_tee *qtee,
+				  struct qcom_tzmem_pool_config *config,
+				  bool apps)
+{
+	if (!qtee->dedicated_heaps)
+		return NULL;
+
+	config->whole_pool_shm_bridge = true;
+	if (apps) {
+		config->reserved_base = qtee->apps_mem_base;
+		config->reserved_size = qtee->apps_mem_size;
+		return qtee->apps_mem_dev;
+	}
+
+	config->reserved_base = qtee->ta_mem_base;
+	config->reserved_size = qtee->ta_mem_size;
+	return qtee->ta_mem_dev;
+}
 
 /**
  * struct qseecom_tee_listener - A listener service offered by a supplicant.
@@ -885,7 +914,10 @@ static int qseecom_tee_invoke_func(struct tee_context *ctx,
 		bc.initial_size = PAGE_ALIGN(need) + PAGE_SIZE;
 		bc.max_size = bc.initial_size;
 
-		bp = qcom_tzmem_pool_new(&bc);
+		bp = qcom_tzmem_pool_new_on_device(
+			qseecom_tee_configure_tzmem_pool(ctxdata->qtee, &bc,
+							 false),
+			&bc);
 		if (IS_ERR(bp))
 			return PTR_ERR(bp);
 
@@ -1500,7 +1532,9 @@ static int qseecom_tee_supp_load_app(struct tee_context *ctx,
 	pool_config.initial_size = stage_len;
 	pool_config.max_size = stage_len;
 
-	pool = qcom_tzmem_pool_new(&pool_config);
+	pool = qcom_tzmem_pool_new_on_device(
+		qseecom_tee_configure_tzmem_pool(qtee, &pool_config, true),
+		&pool_config);
 	if (IS_ERR(pool)) {
 		ret = PTR_ERR(pool);
 		goto out_release;
@@ -1800,6 +1834,160 @@ static const struct tee_desc qseecom_tee_supp_desc = {
 	.flags = TEE_DESC_PRIVILEGED,
 };
 
+static void qseecom_tee_reserved_mem_release(void *data)
+{
+	of_reserved_mem_device_release(data);
+}
+
+static void qseecom_tee_platform_device_unregister(void *data)
+{
+	platform_device_unregister(data);
+}
+
+static void qseecom_tee_shm_bridge_delete(void *data)
+{
+	qcom_tzmem_shm_bridge_delete(*(u64 *)data);
+}
+
+static int qseecom_tee_get_heap(struct device *dev, const char *name,
+				phys_addr_t *base, size_t *size)
+{
+	struct device_node *node;
+	struct reserved_mem *rmem;
+	int index;
+
+	index = of_property_match_string(dev->of_node, "memory-region-names",
+					 name);
+	if (index < 0)
+		return index;
+
+	node = of_parse_phandle(dev->of_node, "memory-region", index);
+	if (!node)
+		return -EINVAL;
+
+	rmem = of_reserved_mem_lookup(node);
+	of_node_put(node);
+	if (!rmem || !rmem->size)
+		return -EINVAL;
+
+	if (!IS_ALIGNED(rmem->base, QSEECOM_TEE_IMAGE_ALIGN) ||
+	    !IS_ALIGNED(rmem->size, QSEECOM_TEE_IMAGE_ALIGN) ||
+	    rmem->base > U32_MAX ||
+	    rmem->size > (u64)U32_MAX + 1 - rmem->base)
+		return -ERANGE;
+
+	*base = rmem->base;
+	*size = rmem->size;
+	return 0;
+}
+
+static int qseecom_tee_register_heap_bridge(struct device *dev,
+					     phys_addr_t base, size_t size,
+					     const char *name)
+{
+	u64 *handle;
+	int ret;
+
+	handle = devm_kzalloc(dev, sizeof(*handle), GFP_KERNEL);
+	if (!handle)
+		return -ENOMEM;
+
+	ret = qcom_tzmem_shm_bridge_create(base, size, handle);
+	if (ret)
+		return ret;
+
+	ret = devm_add_action_or_reset(dev, qseecom_tee_shm_bridge_delete,
+				       handle);
+	if (ret)
+		return ret;
+
+	dev_info(dev, "dedicated %s heap SHM Bridge ready: size=%zu\n",
+		 name, size);
+	return 0;
+}
+
+static int qseecom_tee_setup_dedicated_heaps(struct platform_device *pdev,
+					      struct qseecom_tee *qtee,
+					      struct qcom_tzmem_pool_config *config)
+{
+	struct platform_device *apps_pdev;
+	struct device *dev = &pdev->dev;
+	int ret;
+
+	if (!dev->of_node ||
+	    !of_property_read_bool(dev->of_node, "luma,dedicated-heaps"))
+		return 0;
+
+	ret = qseecom_tee_get_heap(dev, "ta", &qtee->ta_mem_base,
+				   &qtee->ta_mem_size);
+	if (ret)
+		return dev_err_probe(dev, ret, "invalid dedicated TA heap\n");
+
+	ret = qseecom_tee_get_heap(dev, "apps", &qtee->apps_mem_base,
+				   &qtee->apps_mem_size);
+	if (ret)
+		return dev_err_probe(dev, ret, "invalid dedicated apps heap\n");
+
+	ret = of_reserved_mem_device_init_by_name(dev, dev->of_node, "ta");
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to assign dedicated TA heap\n");
+
+	ret = devm_add_action_or_reset(dev, qseecom_tee_reserved_mem_release,
+				       dev);
+	if (ret)
+		return ret;
+
+	apps_pdev = platform_device_alloc("qcom_qseecom_apps_mem",
+					  PLATFORM_DEVID_NONE);
+	if (!apps_pdev)
+		return -ENOMEM;
+
+	apps_pdev->dev.parent = dev;
+	ret = platform_device_add(apps_pdev);
+	if (ret) {
+		platform_device_put(apps_pdev);
+		return ret;
+	}
+
+	ret = devm_add_action_or_reset(dev,
+				       qseecom_tee_platform_device_unregister,
+				       apps_pdev);
+	if (ret)
+		return ret;
+
+	ret = of_reserved_mem_device_init_by_name(&apps_pdev->dev,
+						  dev->of_node, "apps");
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "failed to assign dedicated apps heap\n");
+
+	ret = devm_add_action_or_reset(dev, qseecom_tee_reserved_mem_release,
+				       &apps_pdev->dev);
+	if (ret)
+		return ret;
+
+	ret = qseecom_tee_register_heap_bridge(dev, qtee->ta_mem_base,
+					       qtee->ta_mem_size, "TA");
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "failed to register dedicated TA heap\n");
+
+	ret = qseecom_tee_register_heap_bridge(dev, qtee->apps_mem_base,
+					       qtee->apps_mem_size, "apps");
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "failed to register dedicated apps heap\n");
+
+	qtee->ta_mem_dev = dev;
+	qtee->apps_mem_dev = &apps_pdev->dev;
+	qtee->dedicated_heaps = true;
+	config->max_size = min(config->max_size, qtee->ta_mem_size);
+	qseecom_tee_configure_tzmem_pool(qtee, config, false);
+
+	dev_info(dev, "dedicated QSEECOM heaps active\n");
+	return 0;
+}
+
 static int qseecom_tee_probe(struct platform_device *pdev)
 {
 	struct qcom_tzmem_pool_config pool_config = {
@@ -1828,7 +2016,12 @@ static int qseecom_tee_probe(struct platform_device *pdev)
 	init_waitqueue_head(&qtee->supp.wq);
 	INIT_LIST_HEAD(&qtee->apps);
 
-	qtee->mempool = devm_qcom_tzmem_pool_new(dev, &pool_config);
+	ret = qseecom_tee_setup_dedicated_heaps(pdev, qtee, &pool_config);
+	if (ret)
+		return ret;
+
+	qtee->mempool = devm_qcom_tzmem_pool_new_on_device(
+		dev, qtee->ta_mem_dev, &pool_config);
 	if (IS_ERR(qtee->mempool))
 		return dev_err_probe(dev, PTR_ERR(qtee->mempool),
 				     "failed to create TZ memory pool\n");

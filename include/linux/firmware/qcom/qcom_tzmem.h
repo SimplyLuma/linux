@@ -46,14 +46,24 @@ struct qcom_tzmem_pool_config {
 	enum qcom_tzmem_policy policy;
 	size_t increment;
 	size_t max_size;
+	bool whole_pool_shm_bridge;
+	phys_addr_t reserved_base;
+	size_t reserved_size;
 };
 
 struct qcom_tzmem_pool *
 qcom_tzmem_pool_new(const struct qcom_tzmem_pool_config *config);
+struct qcom_tzmem_pool *
+qcom_tzmem_pool_new_on_device(struct device *alloc_dev,
+			       const struct qcom_tzmem_pool_config *config);
 void qcom_tzmem_pool_free(struct qcom_tzmem_pool *pool);
 struct qcom_tzmem_pool *
 devm_qcom_tzmem_pool_new(struct device *dev,
 			 const struct qcom_tzmem_pool_config *config);
+struct qcom_tzmem_pool *
+devm_qcom_tzmem_pool_new_on_device(struct device *dev,
+				    struct device *alloc_dev,
+				    const struct qcom_tzmem_pool_config *config);
 
 void *qcom_tzmem_alloc(struct qcom_tzmem_pool *pool, size_t size, gfp_t gfp);
 void qcom_tzmem_free(void *ptr);
