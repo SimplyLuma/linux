@@ -2714,55 +2714,6 @@ static const struct of_device_id qcom_scm_qseecom_allowlist[] __maybe_unused = {
 	{ }
 };
 
-static void qcom_scm_qseecom_apps_bridge_free(void *data)
-{
-	u64 *handle = data;
-
-	qcom_tzmem_shm_bridge_delete(*handle);
-}
-
-static int qcom_scm_qseecom_apps_bridge_init(struct qcom_scm *scm)
-{
-	struct device_node *node;
-	struct reserved_mem *rmem;
-	u64 *handle;
-	int ret;
-
-	node = of_parse_phandle(scm->dev->of_node,
-				"qcom,qseecom-apps-region", 0);
-	if (!node)
-		return 0;
-
-	rmem = of_reserved_mem_lookup(node);
-	of_node_put(node);
-	if (!rmem || !rmem->size)
-		return -EINVAL;
-
-	if (!IS_ALIGNED(rmem->base, SZ_4M) ||
-	    !IS_ALIGNED(rmem->size, SZ_4M) ||
-	    rmem->base > U32_MAX ||
-	    rmem->size > (u64)U32_MAX + 1 - rmem->base)
-		return -ERANGE;
-
-	handle = devm_kzalloc(scm->dev, sizeof(*handle), GFP_KERNEL);
-	if (!handle)
-		return -ENOMEM;
-
-	ret = qcom_tzmem_shm_bridge_create(rmem->base, rmem->size, handle);
-	if (ret)
-		return ret;
-
-	ret = devm_add_action_or_reset(scm->dev,
-				       qcom_scm_qseecom_apps_bridge_free,
-				       handle);
-	if (ret)
-		return ret;
-
-	dev_info(scm->dev, "qseecom: SHM Bridge apps pool ready: size=%llu\n",
-		 (unsigned long long)rmem->size);
-	return 0;
-}
-
 static void qcom_scm_qseecom_free(void *data)
 {
 	struct platform_device *qseecom_dev = data;
@@ -2784,15 +2735,28 @@ static void qcom_scm_qseecom_tee_free(void *data)
  */
 static int qcom_scm_qseecom_tee_init(struct qcom_scm *scm)
 {
+	struct device_node *node;
 	struct platform_device *tee_dev;
+	int ret;
 
 	if (!IS_ENABLED(CONFIG_TEE_QSEECOM))
 		return 0;
 
-	tee_dev = platform_device_register_data(scm->dev, "qcom_qseecom_tee",
-						PLATFORM_DEVID_NONE, NULL, 0);
-	if (IS_ERR(tee_dev))
-		return PTR_ERR(tee_dev);
+	tee_dev = platform_device_alloc("qcom_qseecom_tee",
+					PLATFORM_DEVID_NONE);
+	if (!tee_dev)
+		return -ENOMEM;
+
+	tee_dev->dev.parent = scm->dev;
+	node = of_get_compatible_child(scm->dev->of_node,
+				       "luma,qseecom-tee-heaps");
+	tee_dev->dev.of_node = node;
+
+	ret = platform_device_add(tee_dev);
+	if (ret) {
+		platform_device_put(tee_dev);
+		return ret;
+	}
 
 	return devm_add_action_or_reset(scm->dev, qcom_scm_qseecom_tee_free,
 					tee_dev);
@@ -2803,13 +2767,6 @@ static int qcom_scm_qseecom_init(struct qcom_scm *scm)
 	struct platform_device *qseecom_dev;
 	u32 version;
 	int ret;
-
-	ret = qcom_tzmem_register_reserved_pool(scm->dev);
-	if (ret)
-		return ret;
-	ret = qcom_scm_qseecom_apps_bridge_init(scm);
-	if (ret)
-		return ret;
 
 	/*
 	 * Note: We do two steps of validation here: First, we try to query the

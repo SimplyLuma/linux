@@ -35,9 +35,13 @@ struct qcom_tzmem_area {
 struct qcom_tzmem_pool {
 	struct gen_pool *genpool;
 	struct list_head areas;
+	struct device *dev;
 	enum qcom_tzmem_policy policy;
 	size_t increment;
 	size_t max_size;
+	bool whole_pool_shm_bridge;
+	phys_addr_t reserved_base;
+	size_t reserved_size;
 	spinlock_t lock;
 };
 
@@ -57,35 +61,25 @@ static int qcom_tzmem_init(void)
 	return 0;
 }
 
-static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
+static int qcom_tzmem_init_area(struct qcom_tzmem_pool *pool,
+				 struct qcom_tzmem_area *area)
 {
 	return 0;
 }
 
-static void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
+static void qcom_tzmem_cleanup_area(struct qcom_tzmem_pool *pool,
+				    struct qcom_tzmem_area *area)
 {
 
-}
-
-static int qcom_tzmem_init_reserved_pool(struct device *dev)
-{
-	return 0;
 }
 
 #elif IS_ENABLED(CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE)
 
 #include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/of.h>
-#include <linux/of_reserved_mem.h>
-
 #define QCOM_SHM_BRIDGE_NUM_VM_SHIFT 9
 
 static bool qcom_tzmem_using_shm_bridge;
-static bool qcom_tzmem_reserved_pool_bridge;
-static phys_addr_t qcom_tzmem_reserved_pool_base;
-static size_t qcom_tzmem_reserved_pool_size;
-static u64 qcom_tzmem_reserved_pool_handle;
-
 /* List of machines that are known to not support SHM bridge correctly. */
 static const char *const qcom_tzmem_blacklist[] = {
 	"qcom,sc7180", /* hang in rmtfs memory assignment */
@@ -177,68 +171,19 @@ void qcom_tzmem_shm_bridge_delete(u64 handle)
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_shm_bridge_delete);
 
-static void qcom_tzmem_reserved_pool_cleanup(void *data)
-{
-	qcom_tzmem_shm_bridge_delete(qcom_tzmem_reserved_pool_handle);
-	qcom_tzmem_reserved_pool_bridge = false;
-}
-
-static int qcom_tzmem_init_reserved_pool(struct device *dev)
-{
-	struct device_node *node;
-	struct reserved_mem *rmem;
-	int ret;
-
-	if (!of_property_read_bool(dev->of_node,
-				   "qcom,tzmem-whole-pool-shmbridge"))
-		return 0;
-
-	node = of_parse_phandle(dev->of_node, "memory-region", 0);
-	if (!node)
-		return -EINVAL;
-
-	rmem = of_reserved_mem_lookup(node);
-	of_node_put(node);
-	if (!rmem || !rmem->size)
-		return -EINVAL;
-
-	if (!IS_ALIGNED(rmem->base, SZ_4M) ||
-	    !IS_ALIGNED(rmem->size, SZ_4M) ||
-	    rmem->base > U32_MAX ||
-	    rmem->size > (u64)U32_MAX + 1 - rmem->base)
-		return -ERANGE;
-
-	ret = qcom_tzmem_shm_bridge_create(rmem->base, rmem->size,
-					   &qcom_tzmem_reserved_pool_handle);
-	if (ret)
-		return ret;
-
-	qcom_tzmem_reserved_pool_base = rmem->base;
-	qcom_tzmem_reserved_pool_size = rmem->size;
-	qcom_tzmem_reserved_pool_bridge = true;
-
-	ret = devm_add_action_or_reset(dev, qcom_tzmem_reserved_pool_cleanup,
-				       NULL);
-	if (ret)
-		return ret;
-
-	dev_info(dev, "SHM Bridge whole TA pool ready: size=%zu\n",
-		 qcom_tzmem_reserved_pool_size);
-	return 0;
-}
-
-static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
+static int qcom_tzmem_init_area(struct qcom_tzmem_pool *pool,
+				 struct qcom_tzmem_area *area)
 {
 	int ret;
 
-	if (qcom_tzmem_reserved_pool_bridge) {
-		if (area->paddr < qcom_tzmem_reserved_pool_base ||
-		    area->size > qcom_tzmem_reserved_pool_size ||
-		    area->paddr - qcom_tzmem_reserved_pool_base >
-			qcom_tzmem_reserved_pool_size - area->size)
+	if (pool->whole_pool_shm_bridge) {
+		if (area->paddr < pool->reserved_base ||
+		    area->size > pool->reserved_size ||
+		    area->paddr - pool->reserved_base >
+			pool->reserved_size - area->size)
 			return -ERANGE;
 
-		dev_info(qcom_tzmem_dev,
+		dev_info(pool->dev,
 			 "SHM Bridge allocation covered by whole TA pool: size=%zu\n",
 			 area->size);
 		return 0;
@@ -252,18 +197,19 @@ static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
 	if (ret)
 		return ret;
 
-	dev_info(qcom_tzmem_dev, "SHM Bridge area ready: size=%zu\n", area->size);
+	dev_info(pool->dev, "SHM Bridge area ready: size=%zu\n", area->size);
 
 	area->priv = no_free_ptr(handle);
 
 	return 0;
 }
 
-static void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
+static void qcom_tzmem_cleanup_area(struct qcom_tzmem_pool *pool,
+				    struct qcom_tzmem_area *area)
 {
 	u64 *handle = area->priv;
 
-	if (qcom_tzmem_reserved_pool_bridge)
+	if (pool->whole_pool_shm_bridge)
 		return;
 
 	qcom_tzmem_shm_bridge_delete(*handle);
@@ -284,14 +230,14 @@ static int qcom_tzmem_pool_add_memory(struct qcom_tzmem_pool *pool,
 
 	area->size = PAGE_ALIGN(size);
 
-	area->vaddr = dma_alloc_coherent(qcom_tzmem_dev, area->size,
+	area->vaddr = dma_alloc_coherent(pool->dev, area->size,
 					 &area->paddr, gfp);
 	if (!area->vaddr)
 		return -ENOMEM;
 
-	ret = qcom_tzmem_init_area(area);
+	ret = qcom_tzmem_init_area(pool, area);
 	if (ret) {
-		dma_free_coherent(qcom_tzmem_dev, area->size,
+		dma_free_coherent(pool->dev, area->size,
 				  area->vaddr, area->paddr);
 		return ret;
 	}
@@ -299,7 +245,7 @@ static int qcom_tzmem_pool_add_memory(struct qcom_tzmem_pool *pool,
 	ret = gen_pool_add_virt(pool->genpool, (unsigned long)area->vaddr,
 				(phys_addr_t)area->paddr, size, -1);
 	if (ret) {
-		dma_free_coherent(qcom_tzmem_dev, area->size,
+		dma_free_coherent(pool->dev, area->size,
 				  area->vaddr, area->paddr);
 		return ret;
 	}
@@ -322,7 +268,8 @@ static int qcom_tzmem_pool_add_memory(struct qcom_tzmem_pool *pool,
  * Return: New memory pool address or ERR_PTR() on error.
  */
 struct qcom_tzmem_pool *
-qcom_tzmem_pool_new(const struct qcom_tzmem_pool_config *config)
+qcom_tzmem_pool_new_on_device(struct device *alloc_dev,
+			       const struct qcom_tzmem_pool_config *config)
 {
 	int ret = -ENOMEM;
 
@@ -347,6 +294,15 @@ qcom_tzmem_pool_new(const struct qcom_tzmem_pool_config *config)
 	if (!pool)
 		return ERR_PTR(-ENOMEM);
 
+	pool->dev = alloc_dev ?: qcom_tzmem_dev;
+	if (!pool->dev)
+		return ERR_PTR(-ENODEV);
+	if (config->whole_pool_shm_bridge &&
+	    (!config->reserved_size ||
+	     config->reserved_base > U32_MAX ||
+	     config->reserved_size > (u64)U32_MAX + 1 - config->reserved_base))
+		return ERR_PTR(-ERANGE);
+
 	pool->genpool = gen_pool_create(PAGE_SHIFT, -1);
 	if (!pool->genpool)
 		return ERR_PTR(-ENOMEM);
@@ -356,6 +312,9 @@ qcom_tzmem_pool_new(const struct qcom_tzmem_pool_config *config)
 	pool->policy = config->policy;
 	pool->increment = config->increment;
 	pool->max_size = config->max_size;
+	pool->whole_pool_shm_bridge = config->whole_pool_shm_bridge;
+	pool->reserved_base = config->reserved_base;
+	pool->reserved_size = config->reserved_size;
 	INIT_LIST_HEAD(&pool->areas);
 	spin_lock_init(&pool->lock);
 
@@ -369,6 +328,13 @@ qcom_tzmem_pool_new(const struct qcom_tzmem_pool_config *config)
 	}
 
 	return_ptr(pool);
+}
+EXPORT_SYMBOL_GPL(qcom_tzmem_pool_new_on_device);
+
+struct qcom_tzmem_pool *
+qcom_tzmem_pool_new(const struct qcom_tzmem_pool_config *config)
+{
+	return qcom_tzmem_pool_new_on_device(NULL, config);
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_pool_new);
 
@@ -406,8 +372,8 @@ void qcom_tzmem_pool_free(struct qcom_tzmem_pool *pool)
 
 	list_for_each_entry_safe(area, next, &pool->areas, list) {
 		list_del(&area->list);
-		qcom_tzmem_cleanup_area(area);
-		dma_free_coherent(qcom_tzmem_dev, area->size,
+		qcom_tzmem_cleanup_area(pool, area);
+		dma_free_coherent(pool->dev, area->size,
 				  area->vaddr, area->paddr);
 		kfree(area);
 	}
@@ -434,13 +400,14 @@ static void devm_qcom_tzmem_pool_free(void *data)
  * Return: Address of the managed pool or ERR_PTR() on failure.
  */
 struct qcom_tzmem_pool *
-devm_qcom_tzmem_pool_new(struct device *dev,
-			 const struct qcom_tzmem_pool_config *config)
+devm_qcom_tzmem_pool_new_on_device(struct device *dev,
+				    struct device *alloc_dev,
+				    const struct qcom_tzmem_pool_config *config)
 {
 	struct qcom_tzmem_pool *pool;
 	int ret;
 
-	pool = qcom_tzmem_pool_new(config);
+	pool = qcom_tzmem_pool_new_on_device(alloc_dev, config);
 	if (IS_ERR(pool))
 		return pool;
 
@@ -449,6 +416,14 @@ devm_qcom_tzmem_pool_new(struct device *dev,
 		return ERR_PTR(ret);
 
 	return pool;
+}
+EXPORT_SYMBOL_GPL(devm_qcom_tzmem_pool_new_on_device);
+
+struct qcom_tzmem_pool *
+devm_qcom_tzmem_pool_new(struct device *dev,
+			 const struct qcom_tzmem_pool_config *config)
+{
+	return devm_qcom_tzmem_pool_new_on_device(dev, NULL, config);
 }
 EXPORT_SYMBOL_GPL(devm_qcom_tzmem_pool_new);
 
@@ -598,12 +573,6 @@ int qcom_tzmem_enable(struct device *dev)
 	return qcom_tzmem_init();
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_enable);
-
-int qcom_tzmem_register_reserved_pool(struct device *dev)
-{
-	return qcom_tzmem_init_reserved_pool(dev);
-}
-EXPORT_SYMBOL_GPL(qcom_tzmem_register_reserved_pool);
 
 MODULE_DESCRIPTION("TrustZone memory allocator for Qualcomm firmware drivers");
 MODULE_AUTHOR("Bartosz Golaszewski <bartosz.golaszewski@linaro.org>");
