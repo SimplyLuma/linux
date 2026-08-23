@@ -1171,7 +1171,7 @@ static int ff_register_irq(ff_context_t *ff_ctx)
 
     if (ff_ctx->irq_num > 0) {
         FF_LOGI("irq_num:%d", ff_ctx->irq_num);
-        irqflags = IRQF_TRIGGER_RISING | IRQF_ONESHOT;
+        irqflags = IRQF_TRIGGER_RISING;
         ret = request_irq(ff_ctx->irq_num, ff_irq_handler, irqflags, FF_DRV_NAME, ff_ctx);
         if (ret < 0) {
             FF_LOGE("request_irq(%d) failed,ret=%d", ff_ctx->irq_num, ret);
