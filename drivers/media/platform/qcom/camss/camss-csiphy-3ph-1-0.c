@@ -934,6 +934,79 @@ csiphy_lane_regs lane_regs_sm7635[] = {
 	{0x0A14, 0x20, 0x00, CSIPHY_DEFAULT_PARAMS},
 };
 
+/* CSIPHY 2.2.1 three-phase mission-mode settings from Qualcomm downstream. */
+static const struct csiphy_lane_regs lane_regs_sm7635_cphy[] = {
+	{0x02f4, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x02f8, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x02fc, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x02f0, 0xef, 0xd3, CSIPHY_DEFAULT_PARAMS},
+	{0x06f4, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x06f8, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x06fc, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x06f0, 0xef, 0xd3, CSIPHY_DEFAULT_PARAMS},
+	{0x0af4, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0af8, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0afc, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0af0, 0xef, 0xd3, CSIPHY_DEFAULT_PARAMS},
+	{0x0204, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x02e4, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x02e8, 0x7f, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x02ec, 0x7f, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0218, 0x3e, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x021c, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0220, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0224, 0x7f, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0228, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x022c, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0264, 0x01, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0244, 0xb2, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0310, 0x35, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x02bc, 0xd0, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0254, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0240, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0260, 0xa8, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0284, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0290, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0604, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x06e4, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x06e8, 0x7f, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x06ec, 0x7f, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0618, 0x3e, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x061c, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0620, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0624, 0x7f, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0628, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x062c, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0664, 0x01, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0644, 0xb2, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0710, 0x35, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x06bc, 0xd0, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0654, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0640, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0660, 0xa8, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0684, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0690, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0a04, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0ae4, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0ae8, 0x7f, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0aec, 0x7f, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0a18, 0x3e, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0a1c, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0a20, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0a24, 0x7f, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0a28, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0a2c, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0a64, 0x01, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0a44, 0xb2, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0b10, 0x35, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0abc, 0xd0, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0a54, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0a40, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0a60, 0xa8, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0a84, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+	{0x0a90, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
+};
+
 static void csiphy_hw_version_read(struct csiphy_device *csiphy,
 				   struct device *dev)
 {
@@ -1127,6 +1200,51 @@ static void csiphy_gen2_config_lanes(struct csiphy_device *csiphy,
 	}
 }
 
+static void csiphy_sm7635_cphy_enable(struct csiphy_device *csiphy)
+{
+	static const u16 lane_base[] = { 0x0200, 0x0600, 0x0a00 };
+	unsigned int i;
+
+	/* Enable three C-PHY trios and program the shared 2.2.1 controls. */
+	/* Qualcomm C-PHY trio enables occupy bits 1, 3, and 5. */
+	writel_relaxed(0x2a, csiphy->base + 0x1014);
+	writel_relaxed(0x00, csiphy->base + 0x1084);
+	writel_relaxed(0x00, csiphy->base + 0x108c);
+	udelay(1);
+	writel_relaxed(0x7a, csiphy->base + 0x101c);
+	writel_relaxed(0x01, csiphy->base + 0x1018);
+
+	/* Qualcomm datarate_221_1p0Gsps, standard-channel variant. */
+	for (i = 0; i < ARRAY_SIZE(lane_base); i++) {
+		u16 base = lane_base[i];
+
+		writel_relaxed(0xf1, csiphy->base + base + 0x68);
+		writel_relaxed(0x01, csiphy->base + base + 0x94);
+		writel_relaxed(0x58, csiphy->base + base + 0x78);
+		writel_relaxed(0x20, csiphy->base + base + 0x88);
+		writel_relaxed(0x05, csiphy->base + base + 0x6c);
+		writel_relaxed(0x37, csiphy->base + base + 0x8c);
+		writel_relaxed(0x00, csiphy->base + base + 0x70);
+		writel_relaxed(0x03, csiphy->base + base + 0x74);
+		writel_relaxed(0x3c, csiphy->base + base + 0x0c);
+		writel_relaxed(0x00, csiphy->base + base + 0x08);
+		writel_relaxed(0x00, csiphy->base + base + 0x10);
+		writel_relaxed(0x09, csiphy->base + base + 0x14);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(lane_regs_sm7635_cphy); i++) {
+		const struct csiphy_lane_regs *reg = &lane_regs_sm7635_cphy[i];
+
+		writel_relaxed(reg->reg_data, csiphy->base + reg->reg_addr);
+		if (reg->delay_us)
+			udelay(reg->delay_us);
+	}
+
+	/* Release the three-phase PHY from reset. */
+	writel_relaxed(0x0e, csiphy->base + 0x1000);
+	udelay(3000);
+}
+
 static u8 csiphy_get_lane_mask(struct csiphy_lanes_cfg *lane_cfg)
 {
 	u8 lane_mask;
@@ -1173,6 +1291,12 @@ static void csiphy_lanes_enable(struct csiphy_device *csiphy,
 	u8 settle_cnt;
 	u8 val;
 	int i;
+
+	/* FP6 rear-main IMX896 is the sole C-PHY client on CSIPHY0. */
+	if (csiphy->camss->res->version == CAMSS_7635 && csiphy->id == 0) {
+		csiphy_sm7635_cphy_enable(csiphy);
+		return;
+	}
 
 	settle_cnt = csiphy_settle_cnt_calc(link_freq, csiphy->timer_clk_rate);
 

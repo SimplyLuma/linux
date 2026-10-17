@@ -63,6 +63,9 @@ static void __csid_configure_rx(struct csid_device *csid, struct csid_phy_config
 	val |= FIELD_PREP(CSI2_RX_CFG0_DLX_INPUT_SEL_MASK, phy->lane_assign);
 	val |= FIELD_PREP(CSI2_RX_CFG0_PHY_NUM_SEL_MASK,
 			  phy->csiphy_id + CSI2_RX_CFG0_PHY_NUM_SEL_BASE_IDX);
+	/* FP6 rear-main on CSIPHY0 uses three-trio C-PHY. */
+	if (phy->csiphy_id == 0)
+		val |= CSI2_RX_CFG0_PHY_TYPE_SEL;
 	writel_relaxed(val, csid->base + CSID_CSI2_RX_CFG0);
 
 	val = CSI2_RX_CFG1_PACKET_ECC_CORRECTION_EN;
