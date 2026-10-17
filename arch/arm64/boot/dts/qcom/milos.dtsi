@@ -2558,6 +2558,10 @@
 				port@0 {
 					reg = <0>;
 
+					csiphy0_ep: endpoint {
+						remote-endpoint = <&imx896_ep>;
+						data-lanes = <0 1 2>;
+					};
 				};
 
 				port@1 {
@@ -3031,6 +3035,27 @@
 					drive-strength = <2>;
 					bias-pull-up;
 				};
+			};
+
+			cam_mclk0_default: cam-mclk0-default-state {
+				pins = "gpio83";
+				function = "cam_mclk";
+				drive-strength = <4>;
+				bias-disable;
+			};
+
+			cam_mclk0_sleep: cam-mclk0-sleep-state {
+				pins = "gpio83";
+				function = "cam_mclk";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+
+			imx896_reset_default: imx896-reset-default-state {
+				pins = "gpio40";
+				function = "gpio";
+				drive-strength = <2>;
+				bias-disable;
 			};
 
 			cam_mclk1_default: cam-mclk1-default-state {
