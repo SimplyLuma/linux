@@ -1,0 +1,15 @@
+# Native Fedora host MAC; merge through upstream Kconfig, never edit generated headers.
+CONFIG_AUDIT=y
+CONFIG_SECURITY_NETWORK=y
+CONFIG_SECURITY_SELINUX=y
+CONFIG_DEFAULT_SECURITY_SELINUX=y
+# CONFIG_DEFAULT_SECURITY_DAC is not set
+CONFIG_SECURITY_SELINUX_DEVELOP=y
+# CONFIG_SECURITY_SELINUX_BOOTPARAM is not set
+
+# Preserve the released FP6 camera modules through normal Kbuild with new symvers.
+CONFIG_VIDEO_IMX896=m
+CONFIG_VIDEO_OV13B10=m
+CONFIG_VIDEO_S5KKD1SP=m
+CONFIG_VIDEO_DW9714=m
+CONFIG_VIDEO_DW9784=m
