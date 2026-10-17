@@ -596,7 +596,7 @@ static void s5kkd1sp_log_reg(struct s5kkd1sp *sensor, u32 reg,
 
 static void s5kkd1sp_fill_format(struct v4l2_mbus_framefmt *fmt)
 {
-	fmt->code = MEDIA_BUS_FMT_SGRBG10_1X10;
+	fmt->code = MEDIA_BUS_FMT_SGBRG10_1X10;
 	fmt->width = 3104;
 	fmt->height = 2336;
 	fmt->field = V4L2_FIELD_NONE;
@@ -653,7 +653,7 @@ static int s5kkd1sp_enum_mbus_code(struct v4l2_subdev *sd,
 {
 	if (code->index)
 		return -EINVAL;
-	code->code = MEDIA_BUS_FMT_SGRBG10_1X10;
+	code->code = MEDIA_BUS_FMT_SGBRG10_1X10;
 	return 0;
 }
 
@@ -661,7 +661,7 @@ static int s5kkd1sp_enum_frame_size(struct v4l2_subdev *sd,
 				    struct v4l2_subdev_state *state,
 				    struct v4l2_subdev_frame_size_enum *fse)
 {
-	if (fse->index || fse->code != MEDIA_BUS_FMT_SGRBG10_1X10)
+	if (fse->index || fse->code != MEDIA_BUS_FMT_SGBRG10_1X10)
 		return -EINVAL;
 	fse->min_width = fse->max_width = 3104;
 	fse->min_height = fse->max_height = 2336;
@@ -672,11 +672,9 @@ static int s5kkd1sp_get_selection(struct v4l2_subdev *sd,
 				  struct v4l2_subdev_state *state,
 				  struct v4l2_subdev_selection *sel)
 {
-	if (sel->which != V4L2_SUBDEV_FORMAT_ACTIVE)
-		return -EINVAL;
-
 	switch (sel->target) {
 	case V4L2_SEL_TGT_CROP:
+	case V4L2_SEL_TGT_CROP_DEFAULT:
 	case V4L2_SEL_TGT_CROP_BOUNDS:
 	case V4L2_SEL_TGT_NATIVE_SIZE:
 		sel->r.left = 0;
