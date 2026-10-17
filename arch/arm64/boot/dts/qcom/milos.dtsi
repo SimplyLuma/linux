@@ -2560,6 +2560,7 @@
 
 					csiphy0_ep: endpoint {
 						remote-endpoint = <&imx896_ep>;
+						bus-type = <1>; /* MEDIA_BUS_TYPE_CSI2_CPHY */
 						data-lanes = <0 1 2>;
 					};
 				};
