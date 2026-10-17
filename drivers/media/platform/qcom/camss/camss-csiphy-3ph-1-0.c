@@ -1200,7 +1200,8 @@ static void csiphy_gen2_config_lanes(struct csiphy_device *csiphy,
 	}
 }
 
-static void csiphy_sm7635_cphy_enable(struct csiphy_device *csiphy)
+static void csiphy_sm7635_cphy_enable(struct csiphy_device *csiphy,
+				       u8 settle_cnt)
 {
 	static const u16 lane_base[] = { 0x0200, 0x0600, 0x0a00 };
 	unsigned int i;
@@ -1214,22 +1215,22 @@ static void csiphy_sm7635_cphy_enable(struct csiphy_device *csiphy)
 	writel_relaxed(0x7a, csiphy->base + 0x101c);
 	writel_relaxed(0x01, csiphy->base + 0x1018);
 
-	/* Qualcomm datarate_221_1p0Gsps, standard-channel variant. */
+	/* Qualcomm datarate_221_2p5Gsps, standard-channel variant. */
 	for (i = 0; i < ARRAY_SIZE(lane_base); i++) {
 		u16 base = lane_base[i];
 
 		writel_relaxed(0xf1, csiphy->base + base + 0x68);
 		writel_relaxed(0x01, csiphy->base + base + 0x94);
-		writel_relaxed(0x58, csiphy->base + base + 0x78);
+		writel_relaxed(0x20, csiphy->base + base + 0x78);
 		writel_relaxed(0x20, csiphy->base + base + 0x88);
 		writel_relaxed(0x05, csiphy->base + base + 0x6c);
 		writel_relaxed(0x37, csiphy->base + base + 0x8c);
 		writel_relaxed(0x00, csiphy->base + base + 0x70);
 		writel_relaxed(0x03, csiphy->base + base + 0x74);
-		writel_relaxed(0x3c, csiphy->base + base + 0x0c);
+		writel_relaxed(settle_cnt, csiphy->base + base + 0x0c);
 		writel_relaxed(0x00, csiphy->base + base + 0x08);
 		writel_relaxed(0x00, csiphy->base + base + 0x10);
-		writel_relaxed(0x09, csiphy->base + base + 0x14);
+		writel_relaxed(0x00, csiphy->base + base + 0x14);
 	}
 
 	for (i = 0; i < ARRAY_SIZE(lane_regs_sm7635_cphy); i++) {
@@ -1292,13 +1293,13 @@ static void csiphy_lanes_enable(struct csiphy_device *csiphy,
 	u8 val;
 	int i;
 
+	settle_cnt = csiphy_settle_cnt_calc(link_freq, csiphy->timer_clk_rate);
+
 	/* FP6 rear-main IMX896 is the sole C-PHY client on CSIPHY0. */
 	if (csiphy->camss->res->version == CAMSS_7635 && csiphy->id == 0) {
-		csiphy_sm7635_cphy_enable(csiphy);
+		csiphy_sm7635_cphy_enable(csiphy, settle_cnt);
 		return;
 	}
-
-	settle_cnt = csiphy_settle_cnt_calc(link_freq, csiphy->timer_clk_rate);
 
 	val = CSIPHY_3PH_CMN_CSI_COMMON_CTRL5_CLK_ENABLE;
 	for (i = 0; i < c->num_data; i++)
