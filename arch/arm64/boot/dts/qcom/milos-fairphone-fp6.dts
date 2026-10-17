@@ -647,23 +647,32 @@
 		assigned-clocks = <&camcc CAM_CC_MCLK0_CLK>;
 		assigned-clock-rates = <24000000>;
 
-		vddaux-supply = <&vreg_l5p>;
-		vdda-supply = <&vreg_ois_avdd0_1p8>;
-		vddd-supply = <&vreg_l1p>;
-		vddio-supply = <&vreg_l6p>;
+		/*
+		 * IMX896 rails: avdd1 2.8V = vreg_l5p (pm8008), avdd2 1.8V =
+		 * the tlmm27-enabled discrete LDO, dvdd 1.1V = vreg_l1p, and
+		 * dovdd 1.8V = vreg_l6p (shared with the camera EEPROMs).
+		 */
+		avdd1-supply = <&vreg_l5p>;
+		avdd2-supply = <&vreg_ois_avdd0_1p8>;
+		dvdd-supply = <&vreg_l1p>;
+		dovdd-supply = <&vreg_l6p>;
+
+		lens-focus = <&main_vcm>;
 
 		reset-gpios = <&tlmm 40 GPIO_ACTIVE_LOW>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&cam_mclk0_default &imx896_reset_default>;
 
 		orientation = <1>;
-		rotation = <270>;
+		/* The vendor table enables H+V mirror, so compensate by 180 degrees. */
+		rotation = <90>;
 
 		port {
 			imx896_ep: endpoint {
 				remote-endpoint = <&csiphy0_ep>;
+				bus-type = <1>; /* MEDIA_BUS_TYPE_CSI2_CPHY */
 				data-lanes = <0 1 2>;
-				link-frequencies = /bits/ 64 <1131433333>;
+				link-frequencies = /bits/ 64 <1200000000>;
 			};
 		};
 	};
@@ -675,7 +684,20 @@
 		read-only;
 	};
 
-	/* Dongwoon DW9784 VCM/OIS @ 0x72 */
+	/*
+	 * Dongwoon DW9784 OIS/AF controller. Autofocus is enabled while the
+	 * OIS servo remains centered with stabilization disabled.
+	 */
+	main_vcm: focus@72 {
+		compatible = "dongwoon,dw9784";
+		reg = <0x72>;
+
+		vdd-supply = <&vreg_ois_vdd>;
+		vaf-supply = <&vreg_l7p>;
+		vio-supply = <&vreg_l6p>;
+		avdd-supply = <&vreg_ois_avdd0_1p8>;
+	};
+
 };
 
 
