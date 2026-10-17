@@ -2579,7 +2579,10 @@
 				port@3 {
 					reg = <3>;
 
-
+					csiphy3_ep: endpoint {
+						remote-endpoint = <&s5kkd1sp_ep>;
+						data-lanes = <0 1 2 3>;
+					};
 				};
 			};
 		};
@@ -3042,6 +3045,27 @@
 				function = "cam_mclk";
 				drive-strength = <2>;
 				bias-pull-down;
+			};
+
+			cam_mclk3_default: cam-mclk3-default-state {
+				pins = "gpio86";
+				function = "cam_mclk";
+				drive-strength = <4>;
+				bias-disable;
+			};
+
+			cam_mclk3_sleep: cam-mclk3-sleep-state {
+				pins = "gpio86";
+				function = "cam_mclk";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+
+			s5kkd1sp_reset_default: s5kkd1sp-reset-default-state {
+				pins = "gpio43";
+				function = "gpio";
+				drive-strength = <2>;
+				bias-disable;
 			};
 
 			ov13b10_reset_default: ov13b10-reset-default-state {

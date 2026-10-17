@@ -781,6 +781,16 @@ config VIDEO_S5K3M5
 	  To compile this driver as a module, choose M here: the
 	  module will be called s5k3m5.
 
+config VIDEO_S5KKD1SP
+	tristate "Samsung S5KKD1SP sensor support"
+	select V4L2_CCI_I2C
+	help
+	  This is a V4L2 sensor driver for the Samsung S5KKD1SP raw
+	  camera sensor used as the front camera on the Fairphone 6.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called s5kkd1sp.
+
 config VIDEO_S5K5BAF
 	tristate "Samsung S5K5BAF sensor support"
 	help
