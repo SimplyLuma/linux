@@ -53,23 +53,29 @@ OS updates `.21` and `.22` on the FP6 update channel keep the same boot tuple
 ## Initramfs
 
 The ramdisk in the same boot image
-(`944489269addf33f8cd5e8f305ccc368573396e26df03dc6ea63970242659a82`) is an
-unmodified postmarketOS edge initramfs. Its sources are upstream:
+(`944489269addf33f8cd5e8f305ccc368573396e26df03dc6ea63970242659a82`) is three
+concatenated cpio archives. The kernel unpacks them in order, and a later
+file replaces an earlier one.
 
-- Scripts: `postmarketos-initramfs` 3.12.0-r0,
-  [pmaports `41732e213ba0`](https://gitlab.postmarketos.org/postmarketOS/pmaports/-/tree/41732e213ba0/main/postmarketos-initramfs).
-  `init`, `init_2nd.sh`, `init_functions.sh` and `init_functions_2nd.sh` are
-  byte-identical to that commit (apart from the version string `abuild`
-  substitutes into `init`).
-- Kernel modules under `lib/modules/7.1.2/` (16 modules plus their index
-  files): postmarketOS
-  `linux-postmarketos-qcom-milos` 7.1.2
-  ([pmaports `5689eb3c5174`](https://gitlab.postmarketos.org/postmarketOS/pmaports/-/tree/5689eb3c5174/device/testing/linux-postmarketos-qcom-milos)),
-  built from [milos-mainline/linux `v7.1.2-milos`](https://github.com/milos-mainline/linux/tree/v7.1.2-milos).
-- Userspace (busybox, kmod, plymouth, buffybox, e2fsprogs and others): the
-  matching Alpine Linux edge and postmarketOS edge packages
-  ([aports](https://gitlab.alpinelinux.org/alpine/aports),
-  [pmaports](https://gitlab.postmarketos.org/postmarketOS/pmaports)).
+1. and 2. postmarketOS edge, unmodified: `postmarketos-initramfs` 3.12.0-r0
+   ([pmaports `41732e213ba0`](https://gitlab.postmarketos.org/postmarketOS/pmaports/-/tree/41732e213ba0/main/postmarketos-initramfs)),
+   kernel modules from `linux-postmarketos-qcom-milos` 7.1.2
+   ([pmaports `5689eb3c5174`](https://gitlab.postmarketos.org/postmarketOS/pmaports/-/tree/5689eb3c5174/device/testing/linux-postmarketos-qcom-milos),
+   [milos-mainline/linux `v7.1.2-milos`](https://github.com/milos-mainline/linux/tree/v7.1.2-milos)),
+   and userspace from the matching Alpine and postmarketOS edge packages.
+3. The Luma overlay. Its sources are in
+   [SimplyLuma/luma](https://github.com/SimplyLuma/luma); see
+   `docs/devices.md` there under "Fairphone 6 corresponding source":
+   - `/init_functions.sh`: `scripts/mobile/fp6-native-init-functions.sh`
+     (postmarketOS 3.12.0 plus Luma's firmware-store and OSTree root setup).
+   - `/usr/lib/ostree/ostree-prepare-root`: `ostree-2026.5-1.luma.2.fc44`, from
+     `packaging/rpm/ostree-fp6.spec`, `patches/ostree/` and
+     `config/mobile/fp6-ostree-source.json`, with unmodified Fedora 44
+     libraries.
+   - Kernel modules for `7.1.2-luma-fp-ims1.gmu2.selinux1`: this tag.
+
+The README at the tag itself described the initramfs as unmodified. This
+section corrects it.
 
 ## Licence
 
