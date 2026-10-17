@@ -780,7 +780,7 @@
 		pinctrl-0 = <&cam_mclk3_default &s5kkd1sp_reset_default>;
 
 		orientation = <0>;
-		rotation = <270>;
+		rotation = <90>;
 
 		port {
 			s5kkd1sp_ep: endpoint {
