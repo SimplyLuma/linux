@@ -1423,6 +1423,16 @@ static void a6xx_gmu_shutdown(struct a6xx_gmu *gmu)
 			goto force_off;
 
 		a6xx_gmu_clear_oob(&a6xx_gpu->gmu, GMU_OOB_GPU_SET);
+
+		/*
+		 * A8xx can fail to reach its idle level before hw_init. Keep
+		 * the GPU OOB handshake above, then use the existing reset
+		 * path without spending a second polling for that state.
+		 * Preserve normal profiling OOB cleanup when it is active.
+		 */
+		if (adreno_is_a8xx(adreno_gpu) &&
+		    !test_bit(GMU_STATUS_OOB_PERF_SET, &gmu->status))
+			goto force_off;
 	}
 
 	if (test_and_clear_bit(GMU_STATUS_OOB_PERF_SET, &gmu->status))
