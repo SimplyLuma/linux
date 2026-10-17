@@ -154,13 +154,29 @@ static int csiphy_set_clock_rates(struct csiphy_device *csiphy)
 
 		if (csiphy->rate_set[i]) {
 			u64 min_rate = link_freq / 4;
+			bool fp6_cphy_timer =
+				csiphy->camss->res->version == CAMSS_7635 &&
+				csiphy->id == 0 &&
+				!strcmp(clock->name, "csiphy0_timer");
 			long round_rate;
 
 			camss_add_clock_margin(&min_rate);
 
-			for (j = 0; j < clock->nfreqs; j++)
-				if (min_rate < clock->freq[j])
-					break;
+			/*
+			 * The FP6 IMX896 route uses C-PHY on SM7635 CSIPHY0. Its
+			 * dedicated mission-mode programming does not derive settle
+			 * timing from csiphy0_timer, so applying the C-PHY symbol rate
+			 * to that D-PHY timer incorrectly rejects the valid full-sensor
+			 * mode. Keep the timer at its highest supported rate; the PHY
+			 * clock itself continues through the normal rate selection.
+			 */
+			if (fp6_cphy_timer) {
+				j = clock->nfreqs - 1;
+			} else {
+				for (j = 0; j < clock->nfreqs; j++)
+					if (min_rate < clock->freq[j])
+						break;
+			}
 
 			if (j == clock->nfreqs) {
 				dev_err(dev,
