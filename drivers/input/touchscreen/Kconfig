@@ -791,6 +791,13 @@ config TOUCHSCREEN_PENMOUNT
 	  To compile this driver as a module, choose M here: the
 	  module will be called penmount.
 
+config TOUCHSCREEN_FOCALTECH_SPI
+	tristate "FocalTech SPI touchscreens"
+	depends on SPI
+	help
+	  FocalTech touchscreen controllers on SPI, such as the FT3383 used
+	  in the Unihertz Titan 2 Elite.
+
 config TOUCHSCREEN_EDT_FT5X06
 	tristate "EDT FocalTech FT5x06 I2C Touchscreen support"
 	depends on I2C
