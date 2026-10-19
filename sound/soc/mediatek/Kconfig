@@ -86,6 +86,16 @@ config SND_SOC_MT7986_WM8960
 	  Select Y if you have such device.
 	  If unsure select "N".
 
+config SND_SOC_MT6878
+	tristate "ASoC support for Mediatek MT6878 chip"
+	depends on ARCH_MEDIATEK
+	select SND_SOC_MEDIATEK
+	help
+	  This adds ASoC platform driver support for the Mediatek MT6878
+	  audio front end (ADDA to the PMIC codec and ETDM I2S).
+	  Select Y if you have such device.
+	  If unsure select "N".
+
 config SND_SOC_MT8173
 	tristate "ASoC support for Mediatek MT8173 chip"
 	depends on ARCH_MEDIATEK
