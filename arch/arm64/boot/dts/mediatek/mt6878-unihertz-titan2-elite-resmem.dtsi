@@ -1,0 +1,238 @@
+/* Titan 2 Elite firmware carve-outs: preloader + LK allocations from the stock boot log (expdb, 2026-10-17). */
+&{/reserved-memory} {
+	titan-aee-debug-kinfo@48080000 {
+		reg = <0x0 0x48080000 0x0 0x10000>;
+		no-map;
+	};
+	/* Same layout as stock Android's ramoops, so Android shows our last console. */
+	ramoops@48090000 {
+		compatible = "ramoops";
+		reg = <0x0 0x48090000 0x0 0xe0000>;
+		record-size = <0x1000>;
+		console-size = <0x40000>;
+		ftrace-size = <0x1000>;
+		pmsg-size = <0x80000>;
+		max-reason = <2>;
+	};
+	titan-minirdump@48170000 {
+		reg = <0x0 0x48170000 0x0 0x10000>;
+		no-map;
+	};
+	titan-crypto-hw@48401000 {
+		reg = <0x0 0x48401000 0x0 0x1000>;
+		no-map;
+	};
+	titan-bl31-reserved@48800000 {
+		reg = <0x0 0x48800000 0x0 0x200000>;
+		no-map;
+	};
+	titan-security-dice-pvmfw@6fffd000 {
+		reg = <0x0 0x6fffd000 0x0 0x1000>;
+		no-map;
+	};
+	titan-security-dice-common@6fffe000 {
+		reg = <0x0 0x6fffe000 0x0 0x1000>;
+		no-map;
+	};
+	titan-security-tee-sig@6ffff000 {
+		reg = <0x0 0x6ffff000 0x0 0x1000>;
+		no-map;
+	};
+	titan-tee-reserved@70000000 {
+		reg = <0x0 0x70000000 0x0 0x3c00000>;
+		no-map;
+	};
+	titan-spm-reserved@77ff0000 {
+		reg = <0x0 0x77ff0000 0x0 0x10000>;
+		no-map;
+	};
+	titan-system-bl2-ext@78000000 {
+		reg = <0x0 0x78000000 0x0 0x2000000>;
+		no-map;
+	};
+	titan-aee-lk@7e000000 {
+		reg = <0x0 0x7e000000 0x0 0x800000>;
+		no-map;
+	};
+	titan-me-gpumputab-pma@7e800000 {
+		reg = <0x0 0x7e800000 0x0 0x600000>;
+		no-map;
+	};
+	titan-me-gpu-reserved@7ee00000 {
+		reg = <0x0 0x7ee00000 0x0 0x200000>;
+		no-map;
+	};
+	titan-tee-secmem@7f000000 {
+		reg = <0x0 0x7f000000 0x0 0x900000>;
+		no-map;
+	};
+	titan-sspm-ap-shared@7f970000 {
+		reg = <0x0 0x7f970000 0x0 0x110000>;
+		no-map;
+	};
+	titan-mcupm-reserved@7fa80000 {
+		reg = <0x0 0x7fa80000 0x0 0x100000>;
+		no-map;
+	};
+	titan-sspm-reserved@7fb80000 {
+		reg = <0x0 0x7fb80000 0x0 0x280000>;
+		no-map;
+	};
+	titan-system-bl31-dtb@7fe00000 {
+		reg = <0x0 0x7fe00000 0x0 0x100000>;
+		no-map;
+	};
+	/* GPUEB gpufreq shared memory (handed to the EB with CMD_INIT_SHARED_MEM). */
+	gpueb_shared_memory: memory@7fe70000 {
+		reg = <0x0 0x7fe70000 0x0 0x4000>;
+		no-map;
+	};
+	titan-me-gpueb-shared@7fe74000 {
+		reg = <0x0 0x7fe74000 0x0 0x7c000>;
+		no-map;
+	};
+	titan-me-gpueb-fw@7fef0000 {
+		reg = <0x0 0x7fef0000 0x0 0x100000>;
+		no-map;
+	};
+	titan-emi-mbist-buf@7ffff000 {
+		reg = <0x0 0x7ffff000 0x0 0x1000>;
+		no-map;
+	};
+	titan-mm-ccu-reserved@80000000 {
+		reg = <0x0 0x80000000 0x0 0x100000>;
+		no-map;
+	};
+	titan-consys-emi-reserved@87e00000 {
+		reg = <0x0 0x87e00000 0x0 0x2120000>;
+		no-map;
+	};
+	titan-shared-dma-pool-wifi-reserve-memory-dma@88b00000 {
+		reg = <0x0 0x88b00000 0x0 0x1400000>;
+		no-map;
+	};
+	titan-consys-scp-emi-reserved@89f00000 {
+		reg = <0x0 0x89f00000 0x0 0x20000>;
+		no-map;
+	};
+	titan-ap-md-c-smem@8a000000 {
+		reg = <0x0 0x8a000000 0x0 0x1960000>;
+		no-map;
+	};
+	titan-ap-md-c-smem@8c000000 {
+		reg = <0x0 0x8c000000 0x0 0x1960000>;
+		no-map;
+	};
+	titan-ap-md-nc-smem@8c000000 {
+		reg = <0x0 0x8c000000 0x0 0x130000>;
+		no-map;
+	};
+	titan-ap-md-nc-smem@8e000000 {
+		reg = <0x0 0x8e000000 0x0 0x130000>;
+		no-map;
+	};
+	titan-reserve-memory-scp-share@8e000000 {
+		reg = <0x0 0x8e000000 0x0 0x11c8000>;
+		no-map;
+	};
+	titan-apu-sapu-apurvgzctrlshm@8f600000 {
+		reg = <0x0 0x8f600000 0x0 0x100000>;
+		no-map;
+	};
+	titan-apu-apusys-rv-aee-coredump@8f7a0000 {
+		reg = <0x0 0x8f7a0000 0x0 0x260000>;
+		no-map;
+	};
+	titan-apu-apusys-rv-secure@8fa00000 {
+		reg = <0x0 0x8fa00000 0x0 0x600000>;
+		no-map;
+	};
+	titan-adsp-shared-reserved@9e000000 {
+		reg = <0x0 0x9e000000 0x0 0xb70000>;
+		no-map;
+	};
+	titan-debug-met-res-ram@9f3ff000 {
+		reg = <0x0 0x9f3ff000 0x0 0xc00000>;
+		no-map;
+	};
+	titan-scp-reserved@b8000000 {
+		reg = <0x0 0xb8000000 0x0 0x2300000>;
+		no-map;
+	};
+	titan-me-vcp-reserved@bf500000 {
+		reg = <0x0 0xbf500000 0x0 0x800000>;
+		no-map;
+	};
+	titan-ccci-tag-mem@bfdf0000 {
+		reg = <0x0 0xbfdf0000 0x0 0x10000>;
+		no-map;
+	};
+	titan-atf-log-reserved@bfe00000 {
+		reg = <0x0 0xbfe00000 0x0 0x200000>;
+		no-map;
+	};
+	titan-md-mem-usage@d0000000 {
+		reg = <0x0 0xd0000000 0x0 0x20000000>;
+		no-map;
+	};
+	titan-platform-debug-dfdmcu-dump@fa000000 {
+		reg = <0x0 0xfa000000 0x0 0x100000>;
+		no-map;
+	};
+	titan-platform-debug-dfdsoc-dump@fac00000 {
+		reg = <0x0 0xfac00000 0x0 0x200000>;
+		no-map;
+	};
+	titan-platform-mtksmmu-protpgd@fae00000 {
+		reg = <0x0 0xfae00000 0x0 0x4200000>;
+		no-map;
+	};
+	titan-framebuffer@ff0cf000 {
+		reg = <0x0 0xff0cf000 0x0 0xf30000>;
+		no-map;
+	};
+	titan-dramc-rk0@1bfffe000 {
+		reg = <0x1 0xbfffe000 0x0 0x2000>;
+		no-map;
+	};
+	titan-gz-log@33d600000 {
+		reg = <0x3 0x3d600000 0x0 0x41000>;
+		no-map;
+	};
+	titan-unmap2@33d800000 {
+		reg = <0x3 0x3d800000 0x0 0x200000>;
+		no-map;
+	};
+	titan-mkp@33da00000 {
+		reg = <0x3 0x3da00000 0x0 0x200000>;
+		no-map;
+	};
+	titan-gz@33dc00000 {
+		reg = <0x3 0x3dc00000 0x0 0x2200000>;
+		no-map;
+	};
+	titan-display-others-boot-logo-decompressed@33f9b2000 {
+		reg = <0x3 0x3f9b2000 0x0 0x50c000>;
+		no-map;
+	};
+	titan-me-cmdq-reserved@33fe00000 {
+		reg = <0x3 0x3fe00000 0x0 0x100000>;
+		no-map;
+	};
+	titan-display-others-boot-logo-compressed@33febe000 {
+		reg = <0x3 0x3febe000 0x0 0x100000>;
+		no-map;
+	};
+	titan-dpm-reserved@33ffae000 {
+		reg = <0x3 0x3ffae000 0x0 0x10000>;
+		no-map;
+	};
+	titan-log-store@33ffbe000 {
+		reg = <0x3 0x3ffbe000 0x0 0x40000>;
+		no-map;
+	};
+	titan-dramc-rk1@33fffe000 {
+		reg = <0x3 0x3fffe000 0x0 0x2000>;
+		no-map;
+	};
+};

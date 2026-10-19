@@ -1,0 +1,354 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Unihertz Titan 2 Elite (G72BoardV1), standard edition.
+ * Bring-up DT: UFS, USB peripheral and the LK framebuffer only.
+ */
+
+/dts-v1/;
+#include "mt6878.dtsi"
+#include <dt-bindings/spmi/spmi.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+#include "mt6878-unihertz-titan2-elite-resmem.dtsi"
+
+/ {
+	model = "Unihertz Titan 2 Elite";
+	chassis-type = "handset";
+	compatible = "unihertz,titan2-elite", "mediatek,mt6878";
+
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	aliases {
+		serial0 = &uart0;
+	};
+
+
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		key-volume-down {
+			label = "Volume Down";
+			linux,code = <KEY_VOLUMEDOWN>;
+			gpios = <&pio 55 GPIO_ACTIVE_LOW>;
+			debounce-interval = <30>;
+			wakeup-source;
+		};
+
+		key-volume-up {
+			label = "Volume Up";
+			linux,code = <KEY_VOLUMEUP>;
+			gpios = <&pio 54 GPIO_ACTIVE_LOW>;
+			debounce-interval = <30>;
+			wakeup-source;
+		};
+	};
+	chosen {
+		bootargs = "clk_ignore_unused pd_ignore_unused rdinit=/init loglevel=8 panic=5 softlockup_panic=1";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/* LK's boot framebuffer: mblock "framebuffer", 1080x1200 XRGB, 32-pixel aligned pitch. */
+		simplefb@ff0cf000 {
+			compatible = "simple-framebuffer";
+			connector-type = "dsi";
+			reg = <0x0 0xff0cf000 0x0 0xf30000>;
+			width = <1080>;
+			height = <1200>;
+			stride = <(1088 * 4)>;
+			format = "a8r8g8b8";
+			panel = <&fb_panel>;
+
+			fb_panel: fb-panel {
+				width-mm = <62>;
+				height-mm = <69>;
+			};
+		};
+	};
+
+	/* 12 GiB LPDDR5: 0x40000000 - 0x340000000. LK rewrites this node. */
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0x0 0x40000000 0x3 0x0>;
+	};
+
+};
+
+&soc {
+	spmi: spmi@1cc04000 {
+		compatible = "mediatek,mt6878-spmi", "mediatek,mt8195-spmi";
+		reg = <0x1cc04000 0x900>,
+		      <0x1cc01000 0x100>;
+		reg-names = "pmif", "spmimst";
+		/* PMIF is already clocked by firmware; no MT6878 PMIF clocks modelled yet. */
+		clocks = <&clk26m>, <&clk26m>, <&clk26m>;
+		clock-names = "pmif_sys_ck", "pmif_tmr_ck", "spmimst_clk_mux";
+		#address-cells = <2>;
+		#size-cells = <0>;
+
+		pmic@4 {
+			compatible = "mediatek,mt6363-keys";
+			reg = <0x4 SPMI_USID>;
+
+			power {
+				linux,keycodes = <KEY_POWER>;
+			};
+
+			/* The keyboard's left shift is wired to the PMIC's second home key. */
+			home2 {
+				linux,keycodes = <KEY_LEFTSHIFT>;
+			};
+		};
+
+		pmic@5 {
+			compatible = "mediatek,mt6369-regulator";
+			reg = <0x5 SPMI_USID>;
+
+			regulators {
+				mt6369_vmch: vmch {
+					regulator-name = "vmch";
+					regulator-min-microvolt = <3000000>;
+					regulator-max-microvolt = <3000000>;
+				};
+
+				mt6369_vmc: vmc {
+					regulator-name = "vmc";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <3000000>;
+				};
+
+				mt6369_vtp: vtp {
+					regulator-name = "vtp";
+					regulator-min-microvolt = <3000000>;
+					regulator-max-microvolt = <3000000>;
+					/* Bring-up: keep the touch controller powered across driver reloads. */
+					regulator-always-on;
+				};
+			};
+		};
+	};
+
+	/* Bring-up: re-trigger the LK-configured OVL0 -> DSI0 path (command-mode panel). */
+	dsi-kick@1401a000 {
+		compatible = "unihertz,titan2e-dsi-kick";
+		reg = <0x1401a000 0x100>, <0x14001000 0x100>, <0x14002000 0x100>;
+		interrupts = <GIC_SPI 328 IRQ_TYPE_LEVEL_HIGH 0>;	/* DSI0: TE */
+	};
+
+	spi3: spi@11013000 {
+		compatible = "mediatek,mt6878-spi", "mediatek,mt6991-spi";
+		reg = <0x11013000 0x100>;
+		interrupts = <GIC_SPI 462 IRQ_TYPE_LEVEL_HIGH 0>;
+		clocks = <&topckgen CLK_TOP_UNIVPLL_D6_D2>,
+			 <&topckgen CLK_TOP_SPI3_SEL>,
+			 <&pericfg_ao CLK_PERAOP_SPI3_B>;
+		clock-names = "parent-clk", "sel-clk", "spi-clk";
+		mediatek,pad-select = <0>;
+		/* Chip select is software-driven on this SPI block; use the pin as a GPIO CS. */
+		cs-gpios = <&pio 69 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&spi3_pins>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* FT3383 on the main panel; pins 68-71 are left in SPI mode by the preloader. */
+		touchscreen@0 {
+			compatible = "focaltech,ft3383";
+			reg = <0>;
+			spi-max-frequency = <6000000>;
+			interrupts-extended = <&pio 7 IRQ_TYPE_EDGE_FALLING>;
+			reset-gpios = <&pio 6 GPIO_ACTIVE_LOW>;
+			iovcc-gpios = <&pio 119 GPIO_ACTIVE_HIGH>;
+			vdd-supply = <&mt6369_vtp>;
+			touchscreen-size-x = <1080>;
+			touchscreen-size-y = <1200>;
+			touchscreen-inverted-x;
+			touchscreen-inverted-y;
+			/* left top right bottom: edge bands the panel reports compressed */
+			focaltech,edge-margins = <40 40 20 14>;
+		};
+	};
+
+	/* GPU: power and DVFS are owned by the GPUEB, which the bootloader starts. */
+	gpueb_mbox: mailbox@13c3fd80 {
+		compatible = "mediatek,mt6878-gpueb-mbox";
+		reg = <0x13c3fd80 0x280>, <0x13c62000 0x7c>;
+		reg-names = "data", "ctl";
+		interrupts = <GIC_SPI 273 IRQ_TYPE_LEVEL_HIGH 0>;
+		#mbox-cells = <1>;
+	};
+
+	gpufreq: power-controller@13c3fd1c {
+		compatible = "mediatek,mt6878-gpufreq";
+		reg = <0x13c3fd1c 0x64>, <0x13f90000 0x1000>;
+		reg-names = "gpr", "rpc";
+		mboxes = <&gpueb_mbox 0>, <&gpueb_mbox 1>, <&gpueb_mbox 2>,
+			 <&gpueb_mbox 3>, <&gpueb_mbox 4>, <&gpueb_mbox 5>,
+			 <&gpueb_mbox 7>;
+		mbox-names = "fast-dvfs-event", "gpufreq", "sleep", "timer", "fhctl",
+			     "ccf", "fast-dvfs";
+		memory-region = <&gpueb_shared_memory>;
+		#clock-cells = <1>;
+		#nvmem-cell-cells = <0>;
+		#power-domain-cells = <0>;
+
+		shader_present: shader-present {
+		};
+	};
+
+	gpu: gpu@13000000 {
+		compatible = "mediatek,mt6878-mali", "arm,mali-valhall-csf";
+		reg = <0x13000000 0x480000>;
+		clocks = <&gpufreq 0>, <&gpufreq 1>;
+		clock-names = "core", "stacks";
+		interrupts = <GIC_SPI 271 IRQ_TYPE_LEVEL_HIGH 0>,
+			     <GIC_SPI 270 IRQ_TYPE_LEVEL_HIGH 0>,
+			     <GIC_SPI 269 IRQ_TYPE_LEVEL_HIGH 0>;
+		interrupt-names = "job", "mmu", "gpu";
+		nvmem-cells = <&shader_present>;
+		nvmem-cell-names = "shader-present";
+		power-domains = <&gpufreq>;
+	};
+
+	mmc1: mmc@11240000 {
+		compatible = "mediatek,mt6878-mmc", "mediatek,mt8196-mmc";
+		reg = <0x11240000 0x1000>,
+		      <0x11d80000 0x1000>;
+		interrupts = <GIC_SPI 388 IRQ_TYPE_LEVEL_HIGH 0>;
+		clocks = <&topckgen CLK_TOP_MSDC30_1_SEL>,
+			 <&topckgen CLK_TOP_MSDC30_1_HCLK_SEL>,
+			 <&pericfg_ao CLK_PERAOP_MSDC1>,
+			 <&pericfg_ao CLK_PERAOP_MSDC1_H>,
+			 <&pericfg_ao CLK_PERAOP_MSDC1_SLV_H>,
+			 <&pericfg_ao CLK_PERAOP_MSDC1_MST_F>;
+		clock-names = "source", "bus_clk", "source_cg", "hclk",
+			      "pclk_cg", "axi_cg";
+		pinctrl-names = "default", "state_uhs";
+		pinctrl-0 = <&mmc1_default>;
+		pinctrl-1 = <&mmc1_default>;
+		bus-width = <4>;
+		max-frequency = <50000000>;
+		cap-sd-highspeed;
+		cd-gpios = <&pio 14 GPIO_ACTIVE_HIGH>;
+		vmmc-supply = <&mt6369_vmch>;
+		vqmmc-supply = <&mt6369_vmc>;
+		no-mmc;
+		no-sdio;
+		status = "okay";
+	};
+};
+
+&pio {
+	spi3_pins: spi3-pins {
+		pins-cs {
+			pinmux = <0x4500>;	/* GPIO69 as GPIO chip select */
+			output-high;
+		};
+
+		pins-bus {
+			pinmux = <0x4402 0x4602 0x4702>;	/* GPIO68/70/71: SPI3 CLK, MO, MI */
+		};
+	};
+
+	mmc1_default: mmc1-default {
+		pins-cmd-dat {
+			pinmux = <0x4f01 0x5001 0x5101 0x5201 0x4e01>;
+			input-enable;
+			drive-strength = <8>;
+		};
+
+		pins-clk {
+			pinmux = <0x4d01>;
+			drive-strength = <8>;
+		};
+	};
+};
+
+&u2port {
+	status = "okay";
+};
+
+&uart0 {
+	status = "okay";
+};
+
+&ufshci {
+	status = "okay";
+};
+
+&ufsphy {
+	status = "okay";
+};
+
+&usbphy {
+	status = "okay";
+};
+
+&ssusb {
+	dr_mode = "peripheral";
+	status = "okay";
+};
+
+&i2c6 {
+	clock-frequency = <400000>;
+	status = "okay";
+
+	/* TitanKey: 9 x 7 key matrix behind an AW9523B (rows P0_0..P1_0, columns P1_1..P1_7). */
+	keyboard@58 {
+		compatible = "awinic,aw9523b-keypad";
+		reg = <0x58>;
+		interrupts-extended = <&pio 12 IRQ_TYPE_LEVEL_LOW>;
+		reset-gpios = <&pio 53 GPIO_ACTIVE_LOW>;
+		awinic,row-mask = <0x01ff>;
+		awinic,col-mask = <0xfe00>;
+		/* alt and fn give the symbols printed on the keys (the stock layout). */
+		linux,layer-keys = <KEY_LEFTALT KEY_FN>;
+		linux,layer-keymap = <
+			KEY_Q KEY_0  KEY_W KEY_1  KEY_E KEY_2  KEY_R KEY_3
+			KEY_T (0x10000 | KEY_9)  KEY_Y (0x10000 | KEY_0)
+			KEY_U KEY_MINUS  KEY_I (0x10000 | KEY_MINUS)
+			KEY_O (0x10000 | KEY_EQUAL)  KEY_P (0x10000 | KEY_2)
+			KEY_A (0x10000 | KEY_8)  KEY_S KEY_4  KEY_D KEY_5  KEY_F KEY_6
+			KEY_G KEY_SLASH  KEY_H (0x10000 | KEY_SEMICOLON)  KEY_J (0x10000 | KEY_3)
+			KEY_K KEY_APOSTROPHE  KEY_L (0x10000 | KEY_APOSTROPHE)
+			KEY_Z KEY_7  KEY_X KEY_8  KEY_C KEY_9
+			KEY_V (0x10000 | KEY_SLASH)  KEY_B (0x10000 | KEY_1)
+			KEY_N KEY_COMMA  KEY_M KEY_DOT
+		>;
+		linux,keymap = <
+				MATRIX_KEY(0, 0, 24) MATRIX_KEY(0, 1, 23) MATRIX_KEY(0, 2, 46) MATRIX_KEY(0, 3, 48)
+				MATRIX_KEY(0, 4, 33) MATRIX_KEY(0, 5, 19) MATRIX_KEY(0, 6, 59) MATRIX_KEY(1, 0, 14)
+				MATRIX_KEY(1, 1, 37) MATRIX_KEY(1, 2, 45) MATRIX_KEY(1, 3, 36) MATRIX_KEY(1, 4, 32)
+				MATRIX_KEY(1, 5, 18) MATRIX_KEY(1, 6, 22) MATRIX_KEY(2, 0, 38) MATRIX_KEY(2, 1, 21)
+				MATRIX_KEY(2, 2, 44) MATRIX_KEY(2, 3, 35) MATRIX_KEY(2, 4, 31) MATRIX_KEY(2, 5, 17)
+				MATRIX_KEY(2, 6, 37) MATRIX_KEY(3, 0, 25) MATRIX_KEY(3, 1, 22) MATRIX_KEY(3, 2, 57)
+				MATRIX_KEY(3, 3, 49) MATRIX_KEY(3, 4, 30) MATRIX_KEY(3, 5, 16) MATRIX_KEY(3, 6, 33)
+				MATRIX_KEY(4, 0, 28) MATRIX_KEY(4, 1, 20) MATRIX_KEY(4, 2, 47) MATRIX_KEY(4, 3, 50)
+				MATRIX_KEY(4, 4, 34) MATRIX_KEY(4, 5, 44) MATRIX_KEY(4, 6, 45) MATRIX_KEY(5, 0, 102)
+				MATRIX_KEY(5, 1, 100) MATRIX_KEY(5, 2, 158) MATRIX_KEY(5, 3, 580) MATRIX_KEY(5, 4, 68)
+				MATRIX_KEY(5, 5, 49) MATRIX_KEY(5, 6, 50) MATRIX_KEY(6, 0, 464) MATRIX_KEY(6, 1, 108)
+				MATRIX_KEY(6, 2, 103) MATRIX_KEY(6, 3, 28) MATRIX_KEY(6, 4, 87) MATRIX_KEY(6, 5, 183)
+				MATRIX_KEY(6, 6, 56) MATRIX_KEY(7, 0, 54) MATRIX_KEY(7, 1, 105) MATRIX_KEY(7, 2, 106)
+				MATRIX_KEY(7, 3, 57) MATRIX_KEY(7, 4, 115) MATRIX_KEY(7, 5, 128) MATRIX_KEY(7, 6, 129)
+				MATRIX_KEY(8, 0, 56) MATRIX_KEY(8, 1, 131) MATRIX_KEY(8, 2, 132) MATRIX_KEY(8, 3, 133)
+				MATRIX_KEY(8, 4, 134) MATRIX_KEY(8, 5, 135) MATRIX_KEY(8, 6, 136)
+		>;
+	};
+};
+
+/* Battery fuel gauge (Sinowealth SH366100 @0x55), charger and PMIC side channel. */
+&i2c11 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	clock-frequency = <400000>;
+	status = "okay";
+
+	/* Sinowealth SH366100: bq27510-G3 compatible command set. */
+	fuel-gauge@55 {
+		compatible = "ti,bq27510g3";
+		reg = <0x55>;
+	};
+};
