@@ -453,10 +453,14 @@ static int mtk_mfg_eb_off(struct mtk_mfg *mfg)
 static int mtk_mfg_send_ipi(struct mtk_mfg *mfg, struct mtk_mfg_ipi_msg *msg)
 {
 	struct device *dev = &mfg->pdev->dev;
+	u32 cmd = le32_to_cpu(msg->cmd);
 	unsigned long wait;
 	int ret;
 
 	msg->magic = mfg->ipi_magic;
+
+	/* Forget a late reply to an earlier command that timed out. */
+	reinit_completion(&mfg->gf_mbox->rx_done);
 
 	ret = mbox_send_message(mfg->gf_mbox->ch, msg);
 	if (ret < 0) {
@@ -465,10 +469,18 @@ static int mtk_mfg_send_ipi(struct mtk_mfg *mfg, struct mtk_mfg_ipi_msg *msg)
 	}
 
 	wait = wait_for_completion_timeout(&mfg->gf_mbox->rx_done, msecs_to_jiffies(500));
-	if (!wait)
+	if (!wait) {
+		dev_err(dev, "GPUFreq IPI command %u timed out\n", cmd);
 		return -ETIMEDOUT;
+	}
 
 	msg = mfg->gf_mbox->rx_data;
+
+	if (le32_to_cpu(msg->cmd) != cmd) {
+		dev_err(dev, "GPUFreq IPI reply for command %u, expected %u\n",
+			le32_to_cpu(msg->cmd), cmd);
+		return -EPROTO;
+	}
 
 	if (msg->u.return_value < 0) {
 		dev_err(dev, "IPI return: %d\n", msg->u.return_value);
