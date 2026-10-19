@@ -96,6 +96,15 @@ config SND_SOC_MT6878
 	  Select Y if you have such device.
 	  If unsure select "N".
 
+config SND_SOC_MT6878_TITAN2E
+	tristate "ASoC audio driver for the Unihertz Titan 2 Elite"
+	depends on SND_SOC_MT6878 && I2C
+	select SND_SOC_MT6369
+	help
+	  Sound card of the Unihertz Titan 2 Elite: MT6878 AFE, MT6369
+	  codec (earpiece, microphones) and a FourSemi speaker amplifier
+	  on I2S4.
+
 config SND_SOC_MT8173
 	tristate "ASoC support for Mediatek MT8173 chip"
 	depends on ARCH_MEDIATEK
