@@ -59,4 +59,16 @@ struct simplefb_platform_data {
 	const char *format;
 };
 
+struct notifier_block;
+
+/* Notifications from simpledrm: output power and frame copies into the framebuffer. */
+enum simpledrm_event {
+	SIMPLEDRM_OUTPUT_OFF,
+	SIMPLEDRM_OUTPUT_ON,
+	SIMPLEDRM_FRAME_BEGIN,
+	SIMPLEDRM_FRAME_DONE,
+};
+int simpledrm_register_crtc_notifier(struct notifier_block *nb);
+int simpledrm_unregister_crtc_notifier(struct notifier_block *nb);
+
 #endif /* __PLATFORM_DATA_SIMPLEFB_H__ */

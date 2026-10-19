@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 #include <linux/aperture.h>
+#include <linux/notifier.h>
 #include <linux/clk.h>
 #include <linux/minmax.h>
 #include <linux/of_address.h>
@@ -134,6 +135,26 @@ simplefb_read_string_of(struct drm_device *dev, struct device_node *of_node,
 		drm_err(dev, "simplefb: cannot parse framebuffer %s: error %d\n",
 			name, ret);
 	return ret;
+}
+
+/*
+ * Optional "connector-type" ("dsi", "edp" or "lvds"): lets user space tell a
+ * built-in panel, which the firmware left running, from an external display.
+ */
+static int
+simplefb_get_connector_type_of(struct device_node *of_node)
+{
+	const char *type;
+
+	if (!of_node || of_property_read_string(of_node, "connector-type", &type))
+		return DRM_MODE_CONNECTOR_Unknown;
+	if (!strcmp(type, "dsi"))
+		return DRM_MODE_CONNECTOR_DSI;
+	if (!strcmp(type, "edp"))
+		return DRM_MODE_CONNECTOR_eDP;
+	if (!strcmp(type, "lvds"))
+		return DRM_MODE_CONNECTOR_LVDS;
+	return DRM_MODE_CONNECTOR_Unknown;
 }
 
 static int
@@ -553,8 +574,37 @@ static const u64 simpledrm_primary_plane_format_modifiers[] = {
 	DRM_SYSFB_PLANE_FORMAT_MODIFIERS,
 };
 
+/*
+ * Output power notifications: some boards keep a bootloader-configured
+ * command-mode panel running behind simpledrm and need to put it to sleep
+ * when the output is disabled, and to transfer each frame once it has been
+ * copied. Events are the SIMPLEDRM_* values in <linux/platform_data/simplefb.h>.
+ */
+static BLOCKING_NOTIFIER_HEAD(simpledrm_crtc_notifier);
+
+int simpledrm_register_crtc_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&simpledrm_crtc_notifier, nb);
+}
+EXPORT_SYMBOL_GPL(simpledrm_register_crtc_notifier);
+
+int simpledrm_unregister_crtc_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&simpledrm_crtc_notifier, nb);
+}
+EXPORT_SYMBOL_GPL(simpledrm_unregister_crtc_notifier);
+
+static void simpledrm_primary_plane_helper_atomic_update(struct drm_plane *plane,
+							 struct drm_atomic_commit *state)
+{
+	blocking_notifier_call_chain(&simpledrm_crtc_notifier, SIMPLEDRM_FRAME_BEGIN, plane);
+	drm_sysfb_plane_helper_atomic_update(plane, state);
+	blocking_notifier_call_chain(&simpledrm_crtc_notifier, SIMPLEDRM_FRAME_DONE, plane);
+}
+
 static const struct drm_plane_helper_funcs simpledrm_primary_plane_helper_funcs = {
 	DRM_SYSFB_PLANE_HELPER_FUNCS,
+	.atomic_update = simpledrm_primary_plane_helper_atomic_update,
 };
 
 static const struct drm_plane_funcs simpledrm_primary_plane_funcs = {
@@ -562,8 +612,22 @@ static const struct drm_plane_funcs simpledrm_primary_plane_funcs = {
 	.destroy = drm_plane_cleanup,
 };
 
+static void simpledrm_crtc_helper_atomic_enable(struct drm_crtc *crtc,
+						struct drm_atomic_commit *state)
+{
+	blocking_notifier_call_chain(&simpledrm_crtc_notifier, SIMPLEDRM_OUTPUT_ON, crtc);
+}
+
+static void simpledrm_crtc_helper_atomic_disable(struct drm_crtc *crtc,
+						 struct drm_atomic_commit *state)
+{
+	blocking_notifier_call_chain(&simpledrm_crtc_notifier, SIMPLEDRM_OUTPUT_OFF, crtc);
+}
+
 static const struct drm_crtc_helper_funcs simpledrm_crtc_helper_funcs = {
 	DRM_SYSFB_CRTC_HELPER_FUNCS,
+	.atomic_enable = simpledrm_crtc_helper_atomic_enable,
+	.atomic_disable = simpledrm_crtc_helper_atomic_disable,
 };
 
 static const struct drm_crtc_funcs simpledrm_crtc_funcs = {
@@ -798,7 +862,7 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 
 	connector = &sdev->connector;
 	ret = drm_connector_init(dev, connector, &simpledrm_connector_funcs,
-				 DRM_MODE_CONNECTOR_Unknown);
+				 simplefb_get_connector_type_of(pdev->dev.of_node));
 	if (ret)
 		return ERR_PTR(ret);
 	drm_connector_helper_add(connector, &simpledrm_connector_helper_funcs);
