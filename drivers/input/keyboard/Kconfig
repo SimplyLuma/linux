@@ -100,6 +100,14 @@ config KEYBOARD_ATARI
 	  To compile this driver as a module, choose M here: the
 	  module will be called atakbd.
 
+config KEYBOARD_AW9523B
+	tristate "Awinic AW9523B key matrix"
+	depends on I2C
+	select INPUT_MATRIXKMAP
+	help
+	  Key matrix scanned through an Awinic AW9523B I/O expander, as on
+	  the Unihertz Titan 2 Elite.
+
 config KEYBOARD_ATKBD
 	tristate "AT keyboard"
 	default y
