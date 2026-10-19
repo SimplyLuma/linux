@@ -116,8 +116,13 @@ static irqreturn_t mtk_gpueb_mbox_thread(int irq, void *data)
 
 		mtk_gpueb_mbox_read_rx(buf, ch);
 		writel(BIT(ch->num), ch->ebm->mbox_ctl + GPUEB_MBOX_CTL_IRQ_CLR);
-		mbox_chan_received_data(&ch->ebm->mbox.chans[ch->num], buf);
+		/*
+		 * Release the channel before passing the message on. A client
+		 * woken by it may send its next message right away, and the
+		 * mailbox core does not retry a message that send_data refused.
+		 */
 		atomic_set(&ch->rx_status, 0);
+		mbox_chan_received_data(&ch->ebm->mbox.chans[ch->num], buf);
 		return IRQ_HANDLED;
 	}
 
