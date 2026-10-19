@@ -127,6 +127,7 @@
 
 #define MFG_MT8196_E2_ID		0x101
 #define GPUEB_SLEEP_MAGIC		0x55667788UL
+#define GPUEB_TARGET_GPU		1
 #define GPUEB_MEM_MAGIC			0xBABADADAUL
 
 #define GPUEB_TIMEOUT_US		10000UL
@@ -284,6 +285,23 @@ struct mtk_mfg_variant {
 	unsigned int num_regulators;
 	/** @turbo_below: opp indices below this value are considered turbo */
 	unsigned int turbo_below;
+	/** @gf_opp_table_gpu: shared memory offset of the GPU OPP table */
+	unsigned int gf_opp_table_gpu;
+	/** @gf_opp_table_stk: shared memory offset of the Stack OPP table */
+	unsigned int gf_opp_table_stk;
+	/** @gf_shader_present: shared memory offset of the shader core mask */
+	unsigned int gf_shader_present;
+	/** @gf_freq_gpu: shared memory offset of the current GPU frequency */
+	unsigned int gf_freq_gpu;
+	/** @gf_freq_stk: shared memory offset of the current Stack frequency */
+	unsigned int gf_freq_stk;
+	/** @single_target: one GPU rail; OPPs are set for the GPU target only */
+	bool single_target;
+	/**
+	 * @eb_keep_awake: the bootloader starts the EB and the kernel has no
+	 * sequence to wake it again, so never put it to sleep
+	 */
+	bool eb_keep_awake;
 	int (*init)(struct mtk_mfg *mfg);
 };
 
@@ -307,7 +325,7 @@ static unsigned long mtk_mfg_recalc_rate_gpu(struct clk_hw *hw,
 {
 	struct mtk_mfg *mfg = container_of(hw, struct mtk_mfg, clk_core_hw);
 
-	return readl(mfg->shared_mem + GF_REG_FREQ_OUT_GPU) * HZ_PER_KHZ;
+	return readl(mfg->shared_mem + mfg->variant->gf_freq_gpu) * HZ_PER_KHZ;
 }
 
 static int mtk_mfg_determine_rate(struct clk_hw *hw,
@@ -334,7 +352,7 @@ static unsigned long mtk_mfg_recalc_rate_stack(struct clk_hw *hw,
 {
 	struct mtk_mfg *mfg = container_of(hw, struct mtk_mfg, clk_stack_hw);
 
-	return readl(mfg->shared_mem + GF_REG_FREQ_OUT_STK) * HZ_PER_KHZ;
+	return readl(mfg->shared_mem + mfg->variant->gf_freq_stk) * HZ_PER_KHZ;
 }
 
 static const struct clk_ops mtk_mfg_clk_gpu_ops = {
@@ -364,6 +382,15 @@ static int mtk_mfg_eb_on(struct mtk_mfg *mfg)
 	struct device *dev = &mfg->pdev->dev;
 	u32 val;
 	int ret;
+
+	if (mfg->variant->eb_keep_awake) {
+		ret = readl_poll_timeout(mfg->gpr + GPR_LP_STATE, val,
+					 (val == EB_ON_RESUME),
+					 GPUEB_POLL_US, GPUEB_TIMEOUT_US);
+		if (ret)
+			dev_err(dev, "EB is not running, status = 0x%X\n", val);
+		return ret;
+	}
 
 	/*
 	 * If MFG is already on from e.g. the bootloader, skip doing the
@@ -420,6 +447,9 @@ static int mtk_mfg_eb_off(struct mtk_mfg *mfg)
 	};
 	u32 val;
 	int ret;
+
+	if (mfg->variant->eb_keep_awake)
+		return 0;
 
 	ret = mbox_send_message(mfg->slp_mbox->ch, &msg);
 	if (ret < 0) {
@@ -533,9 +563,15 @@ static int mtk_mfg_set_oppidx(struct mtk_mfg *mfg, unsigned int opp_idx)
 	if (opp_idx >= mfg->num_gpu_opps)
 		return -EINVAL;
 
-	msg.cmd = CMD_FIX_DUAL_TARGET_OPPIDX;
-	msg.u.dual_commit.gpu_oppidx = opp_idx;
-	msg.u.dual_commit.stack_oppidx = opp_idx;
+	if (mfg->variant->single_target) {
+		msg.cmd = CMD_FIX_TARGET_OPPIDX;
+		msg.target = cpu_to_le32(GPUEB_TARGET_GPU);
+		msg.u.oppidx = opp_idx;
+	} else {
+		msg.cmd = CMD_FIX_DUAL_TARGET_OPPIDX;
+		msg.u.dual_commit.gpu_oppidx = opp_idx;
+		msg.u.dual_commit.stack_oppidx = opp_idx;
+	}
 
 	ret = mtk_mfg_send_ipi(mfg, &msg);
 	if (ret) {
@@ -581,7 +617,7 @@ static int mtk_mfg_read_opp_tables(struct mtk_mfg *mfg)
 	}
 
 	for (i = 0; i < mfg->num_gpu_opps; i++) {
-		memcpy_fromio(&e, mfg->shared_mem + GF_REG_OPP_TABLE_GPU + i * sizeof(e),
+		memcpy_fromio(&e, mfg->shared_mem + mfg->variant->gf_opp_table_gpu + i * sizeof(e),
 			      sizeof(e));
 		if (mem_is_zero(&e, sizeof(e))) {
 			dev_err(dev, "ran into an empty GPU OPP at index %u\n",
@@ -596,7 +632,7 @@ static int mtk_mfg_read_opp_tables(struct mtk_mfg *mfg)
 	}
 
 	for (i = 0; i < mfg->num_stack_opps; i++) {
-		memcpy_fromio(&e, mfg->shared_mem + GF_REG_OPP_TABLE_STK + i * sizeof(e),
+		memcpy_fromio(&e, mfg->shared_mem + mfg->variant->gf_opp_table_stk + i * sizeof(e),
 			      sizeof(e));
 		if (mem_is_zero(&e, sizeof(e))) {
 			dev_err(dev, "ran into an empty Stack OPP at index %u\n",
@@ -652,7 +688,27 @@ static const struct mtk_mfg_variant mtk_mfg_mt8196_variant = {
 	.regulator_names = mtk_mfg_mt8196_regulators,
 	.num_regulators = ARRAY_SIZE(mtk_mfg_mt8196_regulators),
 	.turbo_below = 7,
+	.gf_opp_table_gpu = GF_REG_OPP_TABLE_GPU,
+	.gf_opp_table_stk = GF_REG_OPP_TABLE_STK,
+	.gf_shader_present = GF_REG_SHADER_PRESENT,
+	.gf_freq_gpu = GF_REG_FREQ_OUT_GPU,
+	.gf_freq_stk = GF_REG_FREQ_OUT_STK,
 	.init = mtk_mfg_mt8196_init,
+};
+
+/*
+ * MT6878: the EB owns the GPU PLLs and regulators and is started by the
+ * bootloader. Its shared memory lacks a few fields of the MT8196 layout,
+ * which moves the OPP tables and the shader mask.
+ */
+static const struct mtk_mfg_variant mtk_mfg_mt6878_variant = {
+	.gf_opp_table_gpu = 0x03ec,
+	.gf_opp_table_stk = 0x0a7c,
+	.gf_shader_present = 0x00d0,
+	.gf_freq_gpu = GF_REG_FREQ_CUR_GPU,
+	.gf_freq_stk = GF_REG_FREQ_CUR_STK,
+	.single_target = true,
+	.eb_keep_awake = true,
 };
 
 static void mtk_mfg_mbox_rx_callback(struct mbox_client *cl, void *mssg)
@@ -924,7 +980,7 @@ static int mtk_mfg_init_nvmem_provider(struct mtk_mfg *mfg)
 		return dev_err_probe(dev, PTR_ERR(nvdev), "Couldn't register nvmem provider\n");
 
 	cell.name = "shader-present";
-	cell.offset = GF_REG_SHADER_PRESENT;
+	cell.offset = mfg->variant->gf_shader_present;
 	cell.bytes = 4;
 	cell.np = of_get_child_by_name(dev->of_node, cell.name);
 
@@ -966,7 +1022,7 @@ static int mtk_mfg_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(mfg->rpc),
 				     "Couldn't retrieve RPC MMIO registers\n");
 
-	mfg->clk_eb = devm_clk_get(dev, "eb");
+	mfg->clk_eb = devm_clk_get_optional(dev, "eb");
 	if (IS_ERR(mfg->clk_eb))
 		return dev_err_probe(dev, PTR_ERR(mfg->clk_eb),
 				     "Couldn't get 'eb' clock\n");
@@ -1077,6 +1133,7 @@ err_remove_genpd:
 }
 
 static const struct of_device_id mtk_mfg_of_match[] = {
+	{ .compatible = "mediatek,mt6878-gpufreq", .data = &mtk_mfg_mt6878_variant },
 	{ .compatible = "mediatek,mt8196-gpufreq", .data = &mtk_mfg_mt8196_variant },
 	{}
 };
