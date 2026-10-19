@@ -984,6 +984,14 @@ config REGULATOR_MT6363
 	  This driver supports the control of different power rails of device
 	  through regulator interface.
 
+config REGULATOR_MT6369
+	tristate "MediaTek MT6369 PMIC LDOs"
+	depends on SPMI
+	select REGMAP_SPMI
+	help
+	  Say y here to support the SD card LDOs (VMCH, VMC) of the
+	  MediaTek MT6369 PMIC, found on MT6878 boards.
+
 config REGULATOR_MT6370
 	tristate "MT6370 SubPMIC Regulator"
 	depends on MFD_MT6370
