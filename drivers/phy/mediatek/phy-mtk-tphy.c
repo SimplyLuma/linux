@@ -877,6 +877,7 @@ static void u2_phy_role_switch_work(struct work_struct *work)
 
 		instance->sw_get_retries += 1;
 		schedule_delayed_work(&instance->dr_work, msecs_to_jiffies(500));
+		return;
 	}
 
 	role = usb_role_switch_get_role(instance->role_switch);
@@ -897,6 +898,7 @@ static int u2_phy_software_role_switch_init(struct mtk_phy_instance *instance)
 	int mode;
 
 	instance->sw_get_retries = 0;
+	INIT_DELAYED_WORK(&instance->dr_work, u2_phy_role_switch_work);
 
 	ep = fwnode_graph_get_endpoint_by_id(dev_fwnode(&instance->phy->dev),
 					     0,
@@ -926,8 +928,6 @@ static int u2_phy_software_role_switch_init(struct mtk_phy_instance *instance)
 		u2_phy_instance_role_set(instance, USB_ROLE_HOST);
 	else
 		u2_phy_instance_role_set(instance, USB_ROLE_DEVICE);
-
-	INIT_DELAYED_WORK(&instance->dr_work, u2_phy_role_switch_work);
 
 	return 0;
 }
