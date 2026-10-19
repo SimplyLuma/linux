@@ -19,8 +19,10 @@
 			pinmux = <0x2101>, <0x2201>, <0x2301>, <0x2401>,
 				 <0x2501>, <0xbf03>, <0x2701>, <0x2801>;
 		};
+		/* GPIO42/43 stay off this list: stock leaves them in GPIO mode
+		 * with Wi-Fi on, and they are the speaker amp I2S4 BCK/LRCK. */
 		pins-wf1 {
-			pinmux = <0x2906>, <0x2a06>, <0x2b06>,
+			pinmux = <0x2906>,
 				 <0xbd03>, <0xc003>, <0xbe03>, <0x2601>;
 		};
 	};
