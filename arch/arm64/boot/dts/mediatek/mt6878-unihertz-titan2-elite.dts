@@ -352,3 +352,5 @@
 		reg = <0x55>;
 	};
 };
+
+#include "mt6878-unihertz-titan2-elite-connsys.dtsi"
