@@ -87,3 +87,5 @@ endif
 
 # for cleaning
 subdir- += vdso vdso32
+
+obj-$(CONFIG_TITAN2E_BUILTIN_DTB)	+= titan2e_dtb.o

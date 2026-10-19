@@ -120,6 +120,7 @@
 #include <kunit/test.h>
 
 static int kernel_init(void *);
+static void titan2e_led(int on);
 
 /*
  * Debug helper: via this flag we know that we are in 'early bootup code'
@@ -1172,6 +1173,7 @@ void start_kernel(void)
 	kcsan_init();
 
 	/* Do the rest non-__init'ed, we're now alive */
+	titan2e_led(0);	/* bring-up: start_kernel done */
 	rest_init();
 
 	/*
@@ -1536,6 +1538,27 @@ void __weak free_initmem(void)
 	free_initmem_default(POISON_FREE_INITMEM);
 }
 
+
+#ifdef CONFIG_TITAN2E_BRINGUP_LED
+#include <linux/delay.h>
+#include <linux/io.h>
+static void titan2e_led(int on)
+{
+	void __iomem *b = ioremap(0x10005000, 0x1000);
+
+	if (!b)
+		return;
+	writel(1 << 23, b + 0x108);
+	writel(0xa00000, b + 0x004);
+	writel(0xf0f00000, b + 0x328);
+	writel(1 << 21, b + (on ? 0x104 : 0x108));
+	iounmap(b);
+	mdelay(2000);
+}
+#else
+static inline void titan2e_led(int on) {}
+#endif
+
 static int __ref kernel_init(void *unused)
 {
 	int ret;
@@ -1570,6 +1593,7 @@ static int __ref kernel_init(void *unused)
 
 	do_sysctl_args();
 
+	titan2e_led(1);	/* bring-up: initcalls done */
 	if (ramdisk_execute_command) {
 		ret = run_init_process(ramdisk_execute_command);
 		if (!ret)

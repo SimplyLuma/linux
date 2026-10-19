@@ -83,6 +83,20 @@
 	 *  x21        primary_entry() .. start_kernel()        FDT pointer passed at boot in x0
 	 */
 SYM_CODE_START(primary_entry)
+#ifdef CONFIG_TITAN2E_BRINGUP_LED
+	/* Bring-up checkpoint: keypad light on at kernel entry (MMU off, x0-x3 kept). */
+	mov	x9, #0x5000
+	movk	x9, #0x1000, lsl #16	/* GPIO base 0x10005000 */
+	mov	w10, #(1 << 21)
+	str	w10, [x9, #0x104]	/* DO_SET: GPIO21 high */
+	mov	w10, #(1 << 23)
+	str	w10, [x9, #0x108]	/* DO_CLR: GPIO23 low */
+	mov	w10, #0xa00000
+	str	w10, [x9, #0x004]	/* DIR_SET: outputs */
+	mov	w10, #0xf0f00000
+	str	w10, [x9, #0x328]	/* MODE_CLR: GPIO function */
+	dsb	sy
+#endif
 	bl	record_mmu_state
 	bl	preserve_boot_args
 

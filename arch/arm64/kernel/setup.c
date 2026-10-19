@@ -289,6 +289,13 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 	early_fixmap_init();
 	early_ioremap_init();
 
+#ifdef CONFIG_TITAN2E_BUILTIN_DTB
+	{
+		extern const char titan2e_dtb[];
+
+		__fdt_pointer = __pa_symbol(titan2e_dtb);
+	}
+#endif
 	setup_machine_fdt(__fdt_pointer);
 
 	/*

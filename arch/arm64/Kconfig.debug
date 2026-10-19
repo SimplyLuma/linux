@@ -16,6 +16,23 @@ config DEBUG_EFI
 	  the kernel that are only useful when using a debug build of the
 	  UEFI firmware
 
+config TITAN2E_BUILTIN_DTB
+	bool "Unihertz Titan 2 Elite: boot with a built-in device tree"
+	help
+	  Ignore the device tree passed by the vendor bootloader and use the
+	  mainline Titan 2 Elite tree linked into the kernel. Bring-up only.
+
+config TITAN2E_BUILTIN_DTB_PATH
+	string "Path to the built-in device tree blob"
+	depends on TITAN2E_BUILTIN_DTB
+
+config TITAN2E_BRINGUP_LED
+	bool "Unihertz Titan 2 Elite bring-up checkpoints on the keypad backlight"
+	help
+	  Debug aid without UART: drive the keypad backlight (GPIO21 at
+	  0x10005000) at kernel entry, end of start_kernel and after the
+	  initcalls. Never enable outside bring-up.
+
 config ARM64_RELOC_TEST
 	depends on m
 	tristate "Relocation testing module"
