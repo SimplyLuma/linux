@@ -89,4 +89,11 @@ config MTK_SOCINFO
 	  information about the SoC to the userspace including the
 	  manufacturer name, marketing name and soc name.
 
+config TITAN2E_DSI_KICK
+	tristate "Titan 2 Elite command-mode panel refresh (bring-up)"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	help
+	  Periodically restarts the bootloader-configured display mutex and
+	  DSI engine so the command-mode panel shows the simple-framebuffer.
+
 endmenu
