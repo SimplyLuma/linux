@@ -28,7 +28,7 @@
 #define PMIF_CMD_EXT_REG_LONG	3
 
 #define PMIF_DELAY_US   2
-#define PMIF_TIMEOUT_US (10 * 1000)
+#define PMIF_TIMEOUT_US (100 * 1000)
 
 #define PMIF_CHAN_OFFSET 0x5
 #define PMIF_RCS_IRQ_MASK	GENMASK(7, 0)
@@ -398,7 +398,7 @@ static int pmif_spmi_read_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid,
 					PMIF_DELAY_US, PMIF_TIMEOUT_US);
 	if (ret < 0) {
 		raw_spin_unlock_irqrestore(&pbus->lock, flags);
-		dev_err(&ctrl->dev, "failed to wait for SWINF_WFVLDCLR\n");
+		dev_err(&ctrl->dev, "failed to wait for SWINF_WFVLDCLR (sta 0x%08x, sid %d addr 0x%04x)\n", data, sid, addr);
 		return ret;
 	}
 
@@ -735,6 +735,22 @@ static int mtk_spmi_bus_probe(struct platform_device *pdev,
 	if (err) {
 		dev_err_probe(&pdev->dev, err, "Failed to enable clocks\n");
 		goto err_put_clks;
+	}
+
+	/*
+	 * Some MT6878 bootloaders leave the AP software channel disabled in the
+	 * arbiter; enable it so commands on soc_chan are accepted.
+	 */
+	if (of_device_is_compatible(pdev->dev.of_node, "mediatek,mt6878-spmi")) {
+		void __iomem *inf = pbus->base + pdata->regs[PMIF_INF_EN];
+		void __iomem *arb_en = pbus->base + pdata->regs[PMIF_ARB_EN];
+		u32 bit = BIT(pdata->soc_chan + 4);
+
+		if (!(readl(inf) & bit)) {
+			writel(readl(inf) | bit, inf);
+			writel(readl(arb_en) | bit, arb_en);
+			dev_info(&pdev->dev, "enabled AP software channel %u\n", pdata->soc_chan);
+		}
 	}
 
 	err = mtk_spmi_irq_init(node, pdata, pbus);
