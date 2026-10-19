@@ -178,6 +178,13 @@ config INPUT_E3X0_BUTTON
 	  To compile this driver as a module, choose M here: the
 	  module will be called e3x0_button.
 
+config INPUT_MT6363_KEYS
+	tristate "MediaTek MT6363 PMIC power key"
+	depends on SPMI
+	select REGMAP_SPMI
+	help
+	  Polled power key of the MediaTek MT6363 PMIC on SPMI.
+
 config INPUT_PCSPKR
 	tristate "PC Speaker support"
 	depends on PCSPKR_PLATFORM
