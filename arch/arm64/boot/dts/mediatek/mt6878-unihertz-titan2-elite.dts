@@ -491,12 +491,23 @@
 
 		port {
 			rear_cam_out: endpoint {
+				remote-endpoint = <&camera_capture_in>;
 				bus-type = <1>;
 				data-lanes = <1 2 3>;
 				link-frequencies = /bits/ 64 <574000000>;
 			};
 		};
 	};
+};
+
+&camera_capture {
+	status = "okay";
+};
+
+&camera_capture_in {
+	remote-endpoint = <&rear_cam_out>;
+	bus-type = <1>;
+	data-lanes = <1 2 3>;
 };
 
 &i2c11 {

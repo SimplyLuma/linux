@@ -746,6 +746,25 @@
 			};
 		};
 
+		camera_capture: camera-capture@1a00e000 {
+			compatible = "mediatek,mt6878-seninf-camsv";
+			reg = <0x1a00e000 0x18000>, <0x11c80000 0x30000>,
+			      <0x1a000000 0x1000>, <0x1a101000 0x9000>,
+			      <0x1a111000 0x9000>, <0x1a121000 0x1000>,
+			      <0x1a170000 0x1000>, <0x1b204000 0x1000>;
+			reg-names = "seninf", "csi", "camsys", "camsv", "camsv-dma",
+				    "camsv-cq", "camsys-mraw", "cam-vcore";
+			interrupts = <GIC_SPI 654 IRQ_TYPE_LEVEL_HIGH 0>;
+			power-domains = <&spm MT6878_POWER_DOMAIN_CAM_MAIN>,
+					<&spm MT6878_POWER_DOMAIN_CSI_RX>;
+			status = "disabled";
+
+			port {
+				camera_capture_in: endpoint {
+				};
+			};
+		};
+
 		scpsys: syscon@1c001000 {
 			compatible = "mediatek,mt6878-scpsys", "syscon", "simple-mfd";
 			reg = <0x1c001000 0x1000>;
