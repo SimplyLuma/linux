@@ -1122,6 +1122,19 @@ config MFD_MT6360
 	  PMIC part includes 2-channel BUCKs and 2-channel LDOs
 	  LDO part includes 4-channel LDOs
 
+config MFD_MT6375
+	tristate "MediaTek MT6375 charger PMIC"
+	select MFD_CORE
+	select REGMAP_I2C
+	select REGMAP_IRQ
+	depends on I2C
+	help
+	  Core driver for the MediaTek MT6375 charger PMIC: its PMU register
+	  bank and interrupt controller. The charger is a separate driver.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called "mt6375".
+
 config MFD_MT6370
 	tristate "MediaTek MT6370 SubPMIC"
 	select MFD_CORE
