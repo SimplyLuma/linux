@@ -88,6 +88,7 @@ select:
           - mediatek,mt6397-pctl-pmic-syscfg
           - mediatek,mt7981-topmisc
           - mediatek,mt7988-topmisc
+          - mediatek,mt6878-infracfg_ao
           - mediatek,mt8135-pctl-a-syscfg
           - mediatek,mt8135-pctl-b-syscfg
           - mediatek,mt8173-pctl-a-syscfg
@@ -201,7 +202,8 @@ properties:
               - mediatek,mt6397-pctl-pmic-syscfg
               - mediatek,mt7981-topmisc
               - mediatek,mt7988-topmisc
-              - mediatek,mt8135-pctl-a-syscfg
+              - mediatek,mt6878-infracfg_ao
+          - mediatek,mt8135-pctl-a-syscfg
               - mediatek,mt8135-pctl-b-syscfg
               - mediatek,mt8173-pctl-a-syscfg
               - mediatek,mt8365-infracfg-nao
