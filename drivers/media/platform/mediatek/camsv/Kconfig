@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config VIDEO_MT6878_CAM_M4U
+	tristate
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on ARM64 && IOMMU_IO_PGTABLE_ARMV7S
