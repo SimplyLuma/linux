@@ -759,8 +759,20 @@
 					<&spm MT6878_POWER_DOMAIN_CSI_RX>;
 			status = "disabled";
 
-			port {
-				camera_capture_in: endpoint {
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				camera_capture_port0: port@0 {
+					reg = <0>;
+				};
+
+				camera_capture_port1: port@1 {
+					reg = <1>;
+				};
+
+				camera_capture_port2: port@2 {
+					reg = <2>;
 				};
 			};
 		};
