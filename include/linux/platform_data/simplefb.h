@@ -67,8 +67,13 @@ enum simpledrm_event {
 	SIMPLEDRM_OUTPUT_ON,
 	SIMPLEDRM_FRAME_BEGIN,
 	SIMPLEDRM_FRAME_DONE,
+	/* to vblank sources, in atomic context; data is the struct drm_crtc */
+	SIMPLEDRM_VBLANK_OFF,
+	SIMPLEDRM_VBLANK_ON,
 };
 int simpledrm_register_crtc_notifier(struct notifier_block *nb);
 int simpledrm_unregister_crtc_notifier(struct notifier_block *nb);
+int simpledrm_register_vblank_source(struct notifier_block *nb);
+int simpledrm_unregister_vblank_source(struct notifier_block *nb);
 
 #endif /* __PLATFORM_DATA_SIMPLEFB_H__ */
