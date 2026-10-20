@@ -17,6 +17,11 @@
  * one slice row; starting in the TE interrupt keeps the write ahead of the
  * refresh. A slow timer refresh remains as a fallback, and frames are sent
  * directly if TE stops. A backlight device drives the panel brightness.
+ *
+ * The driver is also simpledrm's vblank source: on every TE slot that may
+ * start a frame (every te_skip-th TE, 60 Hz) it reports a vblank, so page
+ * flips complete at the panel's refresh, in step with the transfers, instead
+ * of as soon as the copy is done.
  */
 
 #include <linux/backlight.h>
@@ -34,6 +39,7 @@
 #include <linux/platform_data/simplefb.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
+#include <drm/drm_vblank.h>
 #include <video/mipi_display.h>
 
 #define DSI_START		0x00
@@ -80,13 +86,16 @@ struct titan2e_kick {
 	struct mutex lock;		/* DCS commands and panel power */
 	struct backlight_device *bl;
 	struct notifier_block crtc_nb;
+	struct notifier_block vblank_nb;
 	spinlock_t slock;		/* the fields below, vs. the TE interrupt */
 	unsigned int hold;		/* framebuffer copies and DCS commands in progress */
 	bool pending;			/* a frame waits for the next TE */
 	bool delay_armed;
-	unsigned int te_count;
+	unsigned int te_phase;		/* TEs since the last frame slot */
 	unsigned long pending_since;
+	unsigned long last_te;
 	bool panel_on;
+	struct drm_crtc *vblank_crtc;	/* set while simpledrm wants vblank interrupts */
 };
 
 static int titan2e_wait_idle(struct titan2e_kick *k)
@@ -150,29 +159,36 @@ static irqreturn_t titan2e_te_irq(int irq, void *data)
 {
 	struct titan2e_kick *k = data;
 	u32 sta = readl(k->dsi + DSI_INTSTA);
+	struct drm_crtc *vblank = NULL;
 
 	if (!(sta & DSI_TE_RDY))
 		return IRQ_NONE;
 	writel((u32)~DSI_TE_RDY, k->dsi + DSI_INTSTA);	/* write 0 to clear */
 
 	spin_lock(&k->slock);
-	k->te_count++;
-	if (k->pending && !k->hold && k->panel_on && !(sta & DSI_BUSY) && !k->delay_armed &&
-	    k->te_count >= max(READ_ONCE(te_skip), 1U)) {
-		unsigned int delay = READ_ONCE(te_delay_us);
+	k->last_te = jiffies;
+	/* Frames start, and vblanks are reported, only on every te_skip-th TE. */
+	if (++k->te_phase >= max(READ_ONCE(te_skip), 1U)) {
+		k->te_phase = 0;
+		if (k->pending && !k->hold && k->panel_on && !(sta & DSI_BUSY) && !k->delay_armed) {
+			unsigned int delay = READ_ONCE(te_delay_us);
 
-		k->te_count = 0;
-		if (delay) {
-			k->delay_armed = true;
-			hrtimer_start(&k->delay_timer, ns_to_ktime((u64)delay * NSEC_PER_USEC),
-				      HRTIMER_MODE_REL_HARD);
-		} else {
-			titan2e_start_frame(k);
+			if (delay) {
+				k->delay_armed = true;
+				hrtimer_start(&k->delay_timer, ns_to_ktime((u64)delay * NSEC_PER_USEC),
+					      HRTIMER_MODE_REL_HARD);
+			} else {
+				titan2e_start_frame(k);
+			}
 		}
+		vblank = k->vblank_crtc;
 	}
-	if (!k->pending)
+	if (!k->pending && !k->vblank_crtc)
 		titan2e_te_enable(k, false);
 	spin_unlock(&k->slock);
+	/* After the start: a flip committed before this TE completes with its transfer. */
+	if (vblank)
+		drm_crtc_handle_vblank(vblank);
 	return IRQ_HANDLED;
 }
 
@@ -195,6 +211,7 @@ static int titan2e_kick_thread(void *data)
 {
 	struct titan2e_kick *k = data;
 	unsigned long flags, last = jiffies;
+	struct drm_crtc *vblank;
 
 	while (!kthread_should_stop()) {
 		msleep_interruptible(TE_TIMEOUT_MS);
@@ -208,7 +225,13 @@ static int titan2e_kick_thread(void *data)
 		    time_after(jiffies, k->pending_since + msecs_to_jiffies(TE_TIMEOUT_MS)) &&
 		    !(readl(k->dsi + DSI_INTSTA) & DSI_BUSY))
 			titan2e_start_frame(k);
+		vblank = k->vblank_crtc;
+		if (vblank && !time_after(jiffies, k->last_te + msecs_to_jiffies(TE_TIMEOUT_MS)))
+			vblank = NULL;
 		spin_unlock_irqrestore(&k->slock, flags);
+		/* ...and keep page flips completing, slowly, so user space does not stall. */
+		if (vblank)
+			drm_crtc_handle_vblank(vblank);
 	}
 	return 0;
 }
@@ -319,6 +342,26 @@ static int titan2e_crtc_event(struct notifier_block *nb, unsigned long event, vo
 	return NOTIFY_OK;
 }
 
+/* simpledrm turns vblank interrupts on and off; atomic context. */
+static int titan2e_vblank_event(struct notifier_block *nb, unsigned long event, void *data)
+{
+	struct titan2e_kick *k = container_of(nb, struct titan2e_kick, vblank_nb);
+	unsigned long flags;
+
+	spin_lock_irqsave(&k->slock, flags);
+	if (event == SIMPLEDRM_VBLANK_ON) {
+		k->vblank_crtc = data;
+		k->last_te = jiffies;
+		titan2e_te_enable(k, true);
+	} else if (event == SIMPLEDRM_VBLANK_OFF) {
+		k->vblank_crtc = NULL;
+		if (!k->pending)
+			titan2e_te_enable(k, false);
+	}
+	spin_unlock_irqrestore(&k->slock, flags);
+	return NOTIFY_OK;
+}
+
 static int titan2e_bl_update(struct backlight_device *bl)
 {
 	struct titan2e_kick *k = bl_get_data(bl);
@@ -400,6 +443,13 @@ static int titan2e_kick_probe(struct platform_device *pdev)
 		simpledrm_unregister_crtc_notifier(&k->crtc_nb);
 		return PTR_ERR(k->thread);
 	}
+	k->vblank_nb.notifier_call = titan2e_vblank_event;
+	ret = simpledrm_register_vblank_source(&k->vblank_nb);
+	if (ret) {
+		kthread_stop(k->thread);
+		simpledrm_unregister_crtc_notifier(&k->crtc_nb);
+		return ret;
+	}
 	platform_set_drvdata(pdev, k);
 	dev_info(&pdev->dev, "command-mode panel: TE-synced refresh\n");
 	return 0;
@@ -409,6 +459,7 @@ static void titan2e_kick_remove(struct platform_device *pdev)
 {
 	struct titan2e_kick *k = platform_get_drvdata(pdev);
 
+	simpledrm_unregister_vblank_source(&k->vblank_nb);
 	simpledrm_unregister_crtc_notifier(&k->crtc_nb);
 	kthread_stop(k->thread);
 	writel(0, k->dsi + DSI_INTEN);
