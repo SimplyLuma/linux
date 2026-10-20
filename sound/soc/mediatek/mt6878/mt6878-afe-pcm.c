@@ -1716,6 +1716,8 @@ typedef int (*dai_register_cb)(struct mtk_base_afe *);
 static const dai_register_cb dai_register_cbs[] = {
 	mt6878_dai_adda_register,
 	mt6878_dai_i2s_register,
+	mt6878_dai_pcm_register,
+	mt6878_dai_hostless_register,
 	mt6878_dai_memif_register,
 };
 
@@ -1895,15 +1897,11 @@ err_pm_put:
 
 static void mt6878_afe_pcm_dev_remove(struct platform_device *pdev)
 {
-	struct mtk_base_afe *afe = platform_get_drvdata(pdev);
 	struct device *dev = &pdev->dev;
 
+	/* runtime suspend turns off the main and register clocks */
 	if (!pm_runtime_status_suspended(dev))
 		mt6878_afe_runtime_suspend(dev);
-
-	mt6878_afe_disable_main_clock(afe);
-	/* disable afe clock */
-	mt6878_afe_disable_reg_rw_clk(afe);
 }
 
 static const struct of_device_id mt6878_afe_pcm_dt_match[] = {
