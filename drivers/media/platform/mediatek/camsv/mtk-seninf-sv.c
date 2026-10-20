@@ -3,9 +3,10 @@
  * MediaTek MT6878 raw capture: CSI-2 receiver (seninf) feeding a CAMSV
  * DMA engine, without the ISP.
  *
- * Media graph: sensor -> seninf subdev -> camsv video node. The platform
- * driver is named "mtk-seninf" so the libcamera simple pipeline handler
- * picks it up.
+ * Media graph: sensors -> seninf subdev (one sink pad per CSI port) ->
+ * camsv video node. One sensor streams at a time, the one whose link to
+ * the seninf is enabled. The platform driver is named "mtk-seninf" so the
+ * libcamera simple pipeline handler picks it up.
  *
  * Buffers are scatter-gather pages mapped into the MM M4U (larb13 runs
  * translated), one fixed IOVA slot per vb2 buffer index.
@@ -30,8 +31,9 @@
 #include "mt6878-cam-m4u.h"
 #include "mtk-seninf-sv.h"
 
-#define SENINF_PAD_SINK		0
-#define SENINF_PAD_SOURCE	1
+/* sink pad N = CSI port N, then the source pad */
+#define SENINF_PAD_SOURCE	MTK_SV_NUM_PORTS
+#define SENINF_NUM_PADS		(MTK_SV_NUM_PORTS + 1)
 
 #define MTK_SV_IOVA_BASE	0x40000000UL
 #define MTK_SV_IOVA_SLOT	SZ_64M
@@ -75,7 +77,7 @@ static int mtk_seninf_init_state(struct v4l2_subdev *sd, struct v4l2_subdev_stat
 	struct v4l2_mbus_framefmt *fmt;
 	unsigned int pad;
 
-	for (pad = 0; pad < 2; pad++) {
+	for (pad = 0; pad < SENINF_NUM_PADS; pad++) {
 		fmt = v4l2_subdev_state_get_format(state, pad);
 		fmt->width = 4096;
 		fmt->height = 3072;
@@ -93,12 +95,12 @@ static int mtk_seninf_set_fmt(struct v4l2_subdev *sd, struct v4l2_subdev_state *
 		fmt->format.code = mtk_sv_formats[0].code;
 	fmt->format.field = V4L2_FIELD_NONE;
 
-	/* The source pad always mirrors the sink pad. */
+	/* The source pad mirrors the sink pad set last. */
 	if (fmt->pad == SENINF_PAD_SOURCE) {
-		fmt->format = *v4l2_subdev_state_get_format(state, SENINF_PAD_SINK);
+		fmt->format = *v4l2_subdev_state_get_format(state, SENINF_PAD_SOURCE);
 		return 0;
 	}
-	*v4l2_subdev_state_get_format(state, SENINF_PAD_SINK) = fmt->format;
+	*v4l2_subdev_state_get_format(state, fmt->pad) = fmt->format;
 	*v4l2_subdev_state_get_format(state, SENINF_PAD_SOURCE) = fmt->format;
 	return 0;
 }
@@ -112,17 +114,44 @@ static int mtk_seninf_enum_mbus_code(struct v4l2_subdev *sd, struct v4l2_subdev_
 	return 0;
 }
 
+/* the sensor pad linked to the one enabled sink, and its CSI port */
+static struct media_pad *mtk_seninf_active_sink(struct mtk_sv *sv, unsigned int *port)
+{
+	struct media_pad *remote;
+	unsigned int i;
+
+	for (i = 0; i < MTK_SV_NUM_PORTS; i++) {
+		if (!sv->sensors[i].sd)
+			continue;
+		remote = media_pad_remote_pad_first(&sv->seninf_pads[i]);
+		if (remote) {
+			*port = i;
+			return remote;
+		}
+	}
+	return NULL;
+}
+
 static int mtk_seninf_enable_streams(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
 				     u32 pad, u64 streams_mask)
 {
 	struct mtk_sv *sv = container_of(sd, struct mtk_sv, seninf_sd);
-	const struct v4l2_mbus_framefmt *fmt = v4l2_subdev_state_get_format(state, SENINF_PAD_SINK);
+	const struct v4l2_mbus_framefmt *fmt;
 	struct media_pad *remote;
+	unsigned int port;
 	int ret;
 
-	remote = media_pad_remote_pad_unique(&sv->seninf_pads[SENINF_PAD_SINK]);
-	if (IS_ERR(remote))
-		return PTR_ERR(remote);
+	remote = mtk_seninf_active_sink(sv, &port);
+	if (!remote)
+		return -ENOLINK;
+	sv->sensor = sv->sensors[port].sd;
+	sv->port = port;
+	sv->cphy = sv->sensors[port].cphy;
+	sv->num_lanes = sv->sensors[port].num_lanes;
+	sv->link_freq = v4l2_get_link_freq(remote, 0, 0);
+	if (sv->link_freq < 0)
+		return sv->link_freq;
+	fmt = v4l2_subdev_state_get_format(state, port);
 
 	ret = mtk_sv_hw_seninf_start(sv, fmt);
 	if (ret)
@@ -139,9 +168,10 @@ static int mtk_seninf_disable_streams(struct v4l2_subdev *sd, struct v4l2_subdev
 {
 	struct mtk_sv *sv = container_of(sd, struct mtk_sv, seninf_sd);
 	struct media_pad *remote;
+	unsigned int port;
 
-	remote = media_pad_remote_pad_unique(&sv->seninf_pads[SENINF_PAD_SINK]);
-	if (!IS_ERR(remote))
+	remote = mtk_seninf_active_sink(sv, &port);
+	if (remote && sv->sensor == sv->sensors[port].sd)
 		v4l2_subdev_disable_streams(sv->sensor, remote->index, BIT(0));
 	mtk_sv_hw_seninf_stop(sv);
 	return 0;
@@ -169,7 +199,26 @@ static const struct v4l2_subdev_internal_ops mtk_seninf_internal_ops = {
 	.init_state = mtk_seninf_init_state,
 };
 
+/* Only one sensor link may be enabled; it selects the CSI port. */
+static int mtk_seninf_link_setup(struct media_entity *entity, const struct media_pad *local,
+				 const struct media_pad *remote, u32 flags)
+{
+	struct v4l2_subdev *sd = media_entity_to_v4l2_subdev(entity);
+	struct mtk_sv *sv = container_of(sd, struct mtk_sv, seninf_sd);
+	unsigned int i;
+
+	if (!(local->flags & MEDIA_PAD_FL_SINK) || !(flags & MEDIA_LNK_FL_ENABLED))
+		return 0;
+	if (sv->streaming)
+		return -EBUSY;
+	for (i = 0; i < MTK_SV_NUM_PORTS; i++)
+		if (i != local->index && media_pad_remote_pad_first(&sv->seninf_pads[i]))
+			return -EBUSY;
+	return 0;
+}
+
 static const struct media_entity_operations mtk_seninf_entity_ops = {
+	.link_setup = mtk_seninf_link_setup,
 	.link_validate = v4l2_subdev_link_validate,
 };
 
@@ -488,15 +537,30 @@ static int mtk_sv_notify_bound(struct v4l2_async_notifier *notifier, struct v4l2
 			       struct v4l2_async_connection *asc)
 {
 	struct mtk_sv *sv = container_of(notifier, struct mtk_sv, notifier);
+	unsigned int port = container_of(asc, struct mtk_sv_asc, base)->port;
+	bool first = true;
+	unsigned int i;
 	int pad;
 
 	pad = media_entity_get_fwnode_pad(&sd->entity, asc->match.fwnode, MEDIA_PAD_FL_SOURCE);
 	if (pad < 0)
 		return pad;
 
-	sv->sensor = sd;
-	return media_create_pad_link(&sd->entity, pad, &sv->seninf_sd.entity, SENINF_PAD_SINK,
-				     MEDIA_LNK_FL_ENABLED | MEDIA_LNK_FL_IMMUTABLE);
+	for (i = 0; i < MTK_SV_NUM_PORTS; i++)
+		if (sv->sensors[i].sd)
+			first = false;
+	sv->sensors[port].sd = sd;
+	/* the first sensor bound starts out selected */
+	return media_create_pad_link(&sd->entity, pad, &sv->seninf_sd.entity, port,
+				     first ? MEDIA_LNK_FL_ENABLED : 0);
+}
+
+static void mtk_sv_notify_unbind(struct v4l2_async_notifier *notifier, struct v4l2_subdev *sd,
+				 struct v4l2_async_connection *asc)
+{
+	struct mtk_sv *sv = container_of(notifier, struct mtk_sv, notifier);
+
+	sv->sensors[container_of(asc, struct mtk_sv_asc, base)->port].sd = NULL;
 }
 
 static int mtk_sv_notify_complete(struct v4l2_async_notifier *notifier)
@@ -508,31 +572,44 @@ static int mtk_sv_notify_complete(struct v4l2_async_notifier *notifier)
 
 static const struct v4l2_async_notifier_operations mtk_sv_notify_ops = {
 	.bound = mtk_sv_notify_bound,
+	.unbind = mtk_sv_notify_unbind,
 	.complete = mtk_sv_notify_complete,
 };
 
-static int mtk_sv_parse_endpoint(struct mtk_sv *sv)
+/* port@N (N = CSI port 0-2): one sensor endpoint per CSI port */
+static int mtk_sv_parse_endpoints(struct mtk_sv *sv)
 {
-	struct v4l2_fwnode_endpoint ep = { .bus_type = V4L2_MBUS_UNKNOWN };
-	struct v4l2_async_connection *asc;
+	struct mtk_sv_asc *asc;
 	struct fwnode_handle *fwnode;
+	unsigned int port, n = 0;
 	int ret;
 
-	fwnode = fwnode_graph_get_endpoint_by_id(dev_fwnode(sv->dev), 0, 0, 0);
-	if (!fwnode)
-		return dev_err_probe(sv->dev, -EINVAL, "no sensor endpoint\n");
+	for (port = 0; port < MTK_SV_NUM_PORTS; port++) {
+		struct v4l2_fwnode_endpoint ep = { .bus_type = V4L2_MBUS_UNKNOWN };
 
-	ret = v4l2_fwnode_endpoint_parse(fwnode, &ep);
-	if (ret) {
+		fwnode = fwnode_graph_get_endpoint_by_id(dev_fwnode(sv->dev), port, 0, 0);
+		if (!fwnode)
+			continue;
+
+		ret = v4l2_fwnode_endpoint_parse(fwnode, &ep);
+		if (ret) {
+			fwnode_handle_put(fwnode);
+			return dev_err_probe(sv->dev, ret, "bad endpoint on port %u\n", port);
+		}
+		sv->sensors[port].present = true;
+		sv->sensors[port].cphy = ep.bus_type == V4L2_MBUS_CSI2_CPHY;
+		sv->sensors[port].num_lanes = ep.bus.mipi_csi2.num_data_lanes;
+
+		asc = v4l2_async_nf_add_fwnode_remote(&sv->notifier, fwnode, struct mtk_sv_asc);
 		fwnode_handle_put(fwnode);
-		return dev_err_probe(sv->dev, ret, "bad endpoint\n");
+		if (IS_ERR(asc))
+			return PTR_ERR(asc);
+		asc->port = port;
+		n++;
 	}
-	sv->cphy = ep.bus_type == V4L2_MBUS_CSI2_CPHY;
-	sv->num_lanes = ep.bus.mipi_csi2.num_data_lanes;
-
-	asc = v4l2_async_nf_add_fwnode_remote(&sv->notifier, fwnode, struct v4l2_async_connection);
-	fwnode_handle_put(fwnode);
-	return PTR_ERR_OR_ZERO(asc);
+	if (!n)
+		return dev_err_probe(sv->dev, -EINVAL, "no sensor endpoint\n");
+	return 0;
 }
 
 static int mtk_sv_probe(struct platform_device *pdev)
@@ -540,7 +617,7 @@ static int mtk_sv_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct mtk_sv *sv;
 	struct vb2_queue *q;
-	int ret, irq;
+	int ret, irq, i;
 
 	sv = devm_kzalloc(dev, sizeof(*sv), GFP_KERNEL);
 	if (!sv)
@@ -599,9 +676,10 @@ static int mtk_sv_probe(struct platform_device *pdev)
 	sv->seninf_sd.owner = THIS_MODULE;
 	sv->seninf_sd.fwnode = dev_fwnode(dev);
 	strscpy(sv->seninf_sd.name, "mtk-seninf", sizeof(sv->seninf_sd.name));
-	sv->seninf_pads[SENINF_PAD_SINK].flags = MEDIA_PAD_FL_SINK | MEDIA_PAD_FL_MUST_CONNECT;
+	for (i = 0; i < MTK_SV_NUM_PORTS; i++)
+		sv->seninf_pads[i].flags = MEDIA_PAD_FL_SINK;
 	sv->seninf_pads[SENINF_PAD_SOURCE].flags = MEDIA_PAD_FL_SOURCE;
-	ret = media_entity_pads_init(&sv->seninf_sd.entity, 2, sv->seninf_pads);
+	ret = media_entity_pads_init(&sv->seninf_sd.entity, SENINF_NUM_PADS, sv->seninf_pads);
 	if (ret)
 		goto err_v4l2;
 	ret = v4l2_subdev_init_finalize(&sv->seninf_sd);
@@ -653,7 +731,7 @@ static int mtk_sv_probe(struct platform_device *pdev)
 
 	v4l2_async_nf_init(&sv->notifier, &sv->v4l2_dev);
 	sv->notifier.ops = &mtk_sv_notify_ops;
-	ret = mtk_sv_parse_endpoint(sv);
+	ret = mtk_sv_parse_endpoints(sv);
 	if (ret)
 		goto err_nf;
 	ret = v4l2_async_nf_register(&sv->notifier);
@@ -664,8 +742,11 @@ static int mtk_sv_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_nf_unreg;
 
-	dev_info(dev, "seninf + camsv ready (%s, %u lanes)\n",
-		 sv->cphy ? "C-PHY" : "D-PHY", sv->num_lanes);
+	for (i = 0; i < MTK_SV_NUM_PORTS; i++)
+		if (sv->sensors[i].present)
+			dev_info(dev, "CSI port %d: %s, %u lanes\n", i,
+				 sv->sensors[i].cphy ? "C-PHY" : "D-PHY",
+				 sv->sensors[i].num_lanes);
 	return 0;
 
 err_nf_unreg:

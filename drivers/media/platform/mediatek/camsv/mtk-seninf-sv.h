@@ -16,6 +16,7 @@
 #define MTK_SV_MAX_HEIGHT	6144
 #define MTK_SV_STRIDE_ALIGN	16
 #define MTK_SV_IRQ_FRAME_DONE	BIT(0)
+#define MTK_SV_NUM_PORTS	3	/* CSI ports 0-2, one sink pad each */
 
 struct mtk_sv_format {
 	u32 fourcc;
@@ -30,6 +31,18 @@ struct mtk_sv_buffer {
 	size_t mapped;
 };
 
+struct mtk_sv_sensor {
+	struct v4l2_subdev *sd;
+	bool present;
+	bool cphy;
+	unsigned int num_lanes;
+};
+
+struct mtk_sv_asc {
+	struct v4l2_async_connection base;
+	unsigned int port;
+};
+
 struct mtk_sv_hw;
 
 struct mtk_sv {
@@ -37,12 +50,16 @@ struct mtk_sv {
 	struct media_device mdev;
 	struct v4l2_device v4l2_dev;
 	struct v4l2_async_notifier notifier;
+	struct mtk_sv_sensor sensors[MTK_SV_NUM_PORTS];
+	/* the sensor being streamed */
 	struct v4l2_subdev *sensor;
+	unsigned int port;
 	bool cphy;
 	unsigned int num_lanes;
+	s64 link_freq;
 
 	struct v4l2_subdev seninf_sd;
-	struct media_pad seninf_pads[2];
+	struct media_pad seninf_pads[MTK_SV_NUM_PORTS + 1];
 
 	struct video_device vdev;
 	struct media_pad vdev_pad;

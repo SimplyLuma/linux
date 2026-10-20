@@ -2,11 +2,12 @@
 /*
  * MT6878 seninf (CSI PHY 3.1) and CAMSV register programming.
  *
- * Fixed route, as stock uses it for the rear sensor: CSI port 2 (C-PHY,
- * 3 trios, PHY A+B) -> SENINF_5 -> seninf mux 0 (MUX1) -> cammux 10 ->
- * CAMSV2 (camsv_b) tag 2 IMGO. Register sequences from the isp7sp seninf
- * driver (csi phy 3.1) and libccd camsys_sv_compose; FIFO thresholds and
- * the PHY efuse word read back on stock.
+ * Route: CSI port N (PHY A+B as one 4D1C port: 4-lane D-PHY or 3-trio
+ * C-PHY) -> SENINF_(2N+1) -> seninf mux 0 (MUX1) -> cammux 10 -> CAMSV2
+ * (camsv_b) tag 2 IMGO, as stock uses it for the rear sensor. Register
+ * sequences from the isp7sp seninf driver (csi phy 3.1) and libccd
+ * camsys_sv_compose; FIFO thresholds and the PHY efuse words read back on
+ * stock.
  *
  * IMGO runs in UNPACK_MODE, which stores the 8 MSBs of each RAW10 pixel.
  * Addresses are M4U IOVAs (larb13 ports run with MMU_EN=1).
@@ -20,8 +21,11 @@
 #include <linux/pm_domain.h>
 #include "mtk-seninf-sv.h"
 
-#define EFUSE_PORT2		0x7bdce70e	/* csi-port-2 efuse word, stock dmesg */
-#define SETTLE			23		/* ceil(312 MHz * 73 ns) */
+/* csi-port-N efuse words (rg_csi), stock dmesg */
+static const u32 csi_efuse[MTK_SV_NUM_PORTS] = { 0x7b9ee70c, 0x7b9ce68b, 0x7bdce70e };
+
+#define CPHY_SETTLE		23		/* ceil(312 MHz * 73 ns) */
+#define DPHY_SETTLE		26		/* ceil(312 MHz * 100 ns) - 6 */
 #define PIX_MODE		3		/* 8 pixels per cycle, as on stock */
 #define CAMMUX			10		/* camsv2: cammux base 8 + tag 2 */
 #define TAG			2
@@ -51,8 +55,8 @@
 #define SV_FBC0_RCNT_INC	BIT(7)
 
 enum {
-	R_SENINF,	/* 0x1a00e000: top, SENINF_5 (+0x4000), MUX1 (+0xd00), cammux (+0x17000) */
-	R_CSI,		/* 0x11c80000: PHY A/B, D-PHY, C-PHY, MAC top/A/B */
+	R_SENINF,	/* 0x1a00e000: top, SENINF_n (+0x1000 * (n - 1)), MUX1, cammux */
+	R_CSI,		/* 0x11c80000: per port (+0x8000 * N) PHY A/B, D-PHY, C-PHY, MAC top/A/B */
 	R_CAMSYS,	/* 0x1a000000 */
 	R_SV,		/* 0x1a101000, outer + inner */
 	R_SVDMA,	/* 0x1a111000, outer + inner */
@@ -68,20 +72,23 @@ static const char * const reg_names[R_NR] = {
 
 /* offsets of the sub-blocks inside the "seninf" and "csi" regions */
 #define SENTOP			0x0000
-#define SEN5			0x4000
 #define MUX1			0x0000	/* +0xd00 inside top */
 #define CAMMUXB			0x17000
-#define PHYA			0x10000
-#define PHYB			0x11000
-#define DPHY			0x12000
-#define CPHY			0x13000
-#define MACTOP			0x14000
-#define MACA			0x15000
-#define MACB			0x16000
+/* CSI port N feeds SENINF_(2N+1); MUX1_SRC_SEL takes the 0-based index */
+#define SEN			(0x2000 * hw->port)
+#define SENIDX			(2 * hw->port)
+#define PHYA			(0x8000 * hw->port)
+#define PHYB			(PHYA + 0x1000)
+#define DPHY			(PHYA + 0x2000)
+#define CPHY			(PHYA + 0x3000)
+#define MACTOP			(PHYA + 0x4000)
+#define MACA			(PHYA + 0x5000)
+#define MACB			(PHYA + 0x6000)
 
 struct mtk_sv_hw {
 	void __iomem *r[R_NR];
 	void __iomem *spm;
+	unsigned int port;	/* CSI port of the running stream */
 };
 
 static void wr(struct mtk_sv_hw *hw, int r, u32 o, u32 v)
@@ -150,7 +157,7 @@ static void gates_on(struct mtk_sv_hw *hw)
 /* analog PHY init with efuse trim, port A or B */
 static void phya_init(struct mtk_sv_hw *hw, u32 p, bool is_a)
 {
-	u32 e = EFUSE_PORT2, t2, t3, t4;
+	u32 e = csi_efuse[hw->port], t2, t3, t4;
 	const int C = R_CSI;
 
 	fld(hw, C, p + 0x04, GENMASK(2, 0), 4);
@@ -200,24 +207,11 @@ static void phya_init(struct mtk_sv_hw *hw, u32 p, bool is_a)
 	fld(hw, C, p + 0x10, GENMASK(12, 8), t4);
 }
 
-/* C-PHY analog setting for rates below 1.5 Gsps, then power on */
-static void phya_setting(struct mtk_sv_hw *hw, u32 p)
+/* analog PHY power on */
+static void phya_power_on(struct mtk_sv_hw *hw, u32 p)
 {
 	const int C = R_CSI;
 	int i;
-
-	fld(hw, C, p + 0x00, BIT(20), 1);
-	fld(hw, C, p + 0x00, BIT(6) | BIT(7), 3);
-	wr(hw, C, p + 0x14, 0x55);
-	wr(hw, C, p + 0xf0, 0x322);
-	fld(hw, C, p + 0x0c, GENMASK(25, 20), 0x20);
-	fld(hw, C, p + 0x14, GENMASK(1, 0), 1);
-	fld(hw, C, p + 0x14, BIT(4), 0);
-	fld(hw, C, p + 0x14, GENMASK(11, 8), 0);
-	fld(hw, C, p + 0x14, GENMASK(3, 2), 2);
-	fld(hw, C, p + 0x18, GENMASK(28, 24), 0x14);
-	fld(hw, C, p + 0x1c, GENMASK(28, 24), 0x14);
-	fld(hw, C, p + 0x38, BIT(8), 1);
 
 	fld(hw, C, p + 0x20, GENMASK(21, 16), 0);
 	fld(hw, C, p + 0x00, BIT(1) | BIT(0), 0);
@@ -231,13 +225,35 @@ static void phya_setting(struct mtk_sv_hw *hw, u32 p)
 	udelay(1);
 }
 
-static void mac_fixed(struct mtk_sv_hw *hw, u32 m)
+/* C-PHY analog setting for rates below 1.5 Gsps, then power on */
+static void phya_setting(struct mtk_sv_hw *hw, u32 p)
 {
 	const int C = R_CSI;
 
-	wr(hw, C, m + 0x00, 0x7);		/* 3 trios */
-	wr(hw, C, m + 0x04, 0xb7);
-	wr(hw, C, m + 0x08, 0x402);
+	fld(hw, C, p + 0x00, BIT(20), 1);
+	fld(hw, C, p + 0x00, BIT(6) | BIT(7), 3);
+	wr(hw, C, p + 0x14, 0x55);
+	wr(hw, C, p + 0xf0, 0x322);
+	fld(hw, C, p + 0x0c, GENMASK(25, 20), 0x20);
+	fld(hw, C, p + 0x14, GENMASK(1, 0), 1);
+	fld(hw, C, p + 0x14, BIT(4), 0);
+	fld(hw, C, p + 0x14, GENMASK(11, 8), 0);
+	fld(hw, C, p + 0x14, GENMASK(3, 2), 2);
+	fld(hw, C, p + 0x18, GENMASK(28, 24), 0x14);
+	fld(hw, C, p + 0x1c, GENMASK(28, 24), 0x14);
+	fld(hw, C, p + 0x38, BIT(8), 1);
+	phya_power_on(hw, p);
+}
+
+/* MAC CSI2: lanes, C/D-PHY select, ECC/B2P/image packets, size checkers */
+static void mac_fixed(struct mtk_sv_hw *hw, u32 m, bool cphy, unsigned int lanes)
+{
+	const int C = R_CSI;
+
+	wr(hw, C, m + 0x00, GENMASK(lanes - 1, 0));
+	wr(hw, C, m + 0x04, 0xb6 | cphy);
+	/* C-PHY header mode 2 with the trio header length, D-PHY none */
+	wr(hw, C, m + 0x08, cphy ? 0x402 : 0);
 	wr(hw, C, m + 0x10, 0x11f);
 	fld(hw, C, m + 0x14, BIT(24) | BIT(25), 0);
 	wr(hw, C, m + 0xb8, 0xf);
@@ -251,58 +267,37 @@ static void mac_fixed(struct mtk_sv_hw *hw, u32 m)
 	wr(hw, C, m + 0x340, 0x002d0011);
 }
 
-int mtk_sv_hw_seninf_start(struct mtk_sv *sv, const struct v4l2_mbus_framefmt *fmt)
+/* lane timing in the D-PHY top (its TRIO fields are the C-PHY settle) */
+static void dphy_timing(struct mtk_sv_hw *hw, bool cphy)
 {
-	struct mtk_sv_hw *hw = sv->hw;
-	const int S = R_SENINF, C = R_CSI;
+	const int C = R_CSI;
 	u32 o;
-	int i;
 
-	if (!sv->cphy || sv->num_lanes != 3)
-		return -EINVAL;	/* only the 3-trio C-PHY port is wired up */
-	if (!powered(hw))
-		return -EIO;
-
-	/* reset */
-	fld(hw, S, SEN5 + 0x210, BIT(4), 1);
-	udelay(1);
-	fld(hw, S, SEN5 + 0x210, BIT(4), 0);
-	fld(hw, C, MACTOP + 0x00, BIT(0), 1);
-	udelay(1);
-	fld(hw, C, MACTOP + 0x00, BIT(0), 0);
-
-	/* VC/DT filter on SENINF_5 csi2: VC 0, DT 0x2b (RAW10) */
-	for (o = 0x20; o <= 0x3c; o += 4)
-		wr(hw, S, SEN5 + 0xa00 + o, 0);
-	for (o = 0x60; o <= 0x6c; o += 4)
-		wr(hw, S, SEN5 + 0xa00 + o, 0);
-	wr(hw, S, SEN5 + 0xa20, 0x002b0011);
-	wr(hw, S, SEN5 + 0xa60, 0x100);
-
-	/* PHY init */
-	phya_init(hw, PHYA, true);
-	phya_init(hw, PHYB, false);
-	for (o = 0x20; o <= 0x2c; o += 4)
-		wr(hw, C, DPHY + o, SETTLE << 18);
-	for (o = 0x10; o <= 0x14; o += 4) {
-		fld(hw, C, DPHY + o, GENMASK(23, 16), SETTLE);
-		fld(hw, C, DPHY + o, BIT(28), 0);
+	if (cphy) {
+		for (o = 0x20; o <= 0x2c; o += 4)
+			wr(hw, C, DPHY + o, CPHY_SETTLE << 18);
+		for (o = 0x10; o <= 0x14; o += 4) {
+			fld(hw, C, DPHY + o, GENMASK(23, 16), CPHY_SETTLE);
+			fld(hw, C, DPHY + o, BIT(28), 0);
+		}
+		return;
 	}
-	fld(hw, C, CPHY + 0x18, BIT(4), 1);
 
-	/* MAC top, MAC CSI2 */
-	fld(hw, C, MACTOP + 0x00, BIT(16), 0);
-	wr(hw, C, MACTOP + 0x40, 0x2);
-	mac_fixed(hw, MACA);
-	mac_fixed(hw, MACB);
-	fld(hw, C, CPHY + 0x130, BIT(1), 0);	/* no LRTE */
+	/* data lanes: settle, HS prepare on, no trail; clock lanes: prepare on */
+	for (o = 0x20; o <= 0x2c; o += 4)
+		wr(hw, C, DPHY + o, DPHY_SETTLE << 18 | BIT(28));
+	for (o = 0x10; o <= 0x14; o += 4)
+		wr(hw, C, DPHY + o, BIT(28));
+	fld(hw, C, DPHY + 0x50, BIT(8), 1);		/* deskew on */
+	for (o = 0x60; o <= 0x6c; o += 4)
+		fld(hw, C, DPHY + o, BIT(0), 0);	/* no deskew delay */
+}
 
-	/* SENINF_5 */
-	fld(hw, S, SENTOP + 0x004, BIT(2), 1);
-	fld(hw, S, SEN5 + 0x210, BIT(0), 1);
-	fld(hw, S, SEN5 + 0x200, BIT(0), 1);
+/* PHY A/B as one 4D1C C-PHY port, 3 trios */
+static void cphy_setting(struct mtk_sv_hw *hw)
+{
+	const int C = R_CSI;
 
-	/* PHY A/B C-PHY setting + power on, port 2 as 3 trios */
 	phya_setting(hw, PHYA);
 	phya_setting(hw, PHYB);
 	fld(hw, C, PHYA + 0xf4, GENMASK(7, 4), 0xc);
@@ -327,8 +322,114 @@ int mtk_sv_hw_seninf_start(struct mtk_sv *sv, const struct v4l2_mbus_framefmt *f
 	wr(hw, C, DPHY + 0xf0, 0xf1);
 	wr(hw, C, CPHY + 0xf0, 0xf);
 	wr(hw, C, CPHY + 0xf4, 0x00ff0000);
+}
 
-	/* seninf mux 0 (MUX1), source SENINF_5 */
+/*
+ * PHY A/B as one 4D1C D-PHY port, 4 data lanes up to 2.5 Gbps: data lanes
+ * on A0/A1/B0/B1, clock on A2. The equaliser setting follows the lane rate.
+ */
+static void dphy_setting(struct mtk_sv_hw *hw, s64 link_freq)
+{
+	const int C = R_CSI;
+	bool fast = link_freq * 2 >= 1500000000LL;
+	u32 p;
+	int i;
+
+	for (i = 0; i < 2; i++) {
+		p = i ? PHYB : PHYA;
+		fld(hw, C, p + 0x00, BIT(20), 0);			/* CPHY_EN */
+		fld(hw, C, p + 0x00, GENMASK(14, 12), i ? 0 : 4);	/* CKMODE: A L2 */
+		fld(hw, C, p + 0x00, GENMASK(10, 8), 7);		/* CKSEL */
+		fld(hw, C, p + 0x00, BIT(6) | BIT(7), 3);		/* HSMODE */
+		fld(hw, C, p + 0x14, GENMASK(1, 0), 1);			/* EQ_BW */
+		fld(hw, C, p + 0x14, BIT(4), fast);			/* EQ_DG0_EN */
+		fld(hw, C, p + 0x14, GENMASK(11, 8), 0);		/* EQ_SR0 */
+		fld(hw, C, p + 0x14, GENMASK(3, 2), 2);			/* EQ_IS */
+		fld(hw, C, p + 0x38, BIT(8), 1);			/* EQ_OS_IS */
+		fld(hw, C, p + 0xf4, GENMASK(23, 20), 3);		/* AFIFO dummy valid num */
+	}
+	fld(hw, C, PHYA + 0xf4, GENMASK(7, 4), 4);		/* ASYNC_OPTION, no PN swap */
+	fld(hw, C, PHYA + 0xf4, BIT(2), 1);			/* AFIFO dummy valid on */
+	fld(hw, C, PHYA + 0xf4, GENMASK(19, 16), 4);
+	fld(hw, C, PHYA + 0xf4, GENMASK(29, 24), 4);
+	fld(hw, C, PHYA + 0xf0, GENMASK(7, 4), 2);		/* async FIFO gating */
+	phya_power_on(hw, PHYA);
+	phya_power_on(hw, PHYB);
+
+	fld(hw, C, DPHY + 0x204, GENMASK(3, 0), 0xf);		/* lane flush */
+	fld(hw, C, PHYA + 0x20, BIT(0), 1);
+	for (i = 0; i < 2; i++) {
+		p = i ? PHYB : PHYA;
+		fld(hw, C, p + 0xf4, GENMASK(29, 24), 3);	/* gap */
+		fld(hw, C, p + 0xf4, GENMASK(19, 16), 0);	/* prepare */
+		fld(hw, C, p + 0xf4, BIT(30), 1);		/* deskew */
+		fld(hw, C, p + 0x100, BIT(0) | BIT(8), 3);	/* L0/L1 AFIFO flush */
+	}
+	fld(hw, C, PHYA + 0xf4, BIT(3), 0);			/* no split */
+	/* LC0, LD0-3 on; LC0 = A2, LD0 = A1, LD1 = B0, LD2 = A0, LD3 = B1 */
+	wr(hw, C, DPHY + 0x00, BIT(0) | GENMASK(11, 8));
+	wr(hw, C, DPHY + 0x04, 2 | 1 << 8 | 3 << 12 | 0 << 16 | 4 << 20 | BIT(31));
+	fld(hw, C, DPHY + 0x08, GENMASK(17, 12), 0);		/* no PN swap */
+	fld(hw, C, DPHY + 0x180, BIT(3), 1);			/* sync method */
+	wr(hw, C, DPHY + 0xf0, 0xf1);
+	wr(hw, C, DPHY + 0x94, 0xf);
+}
+
+int mtk_sv_hw_seninf_start(struct mtk_sv *sv, const struct v4l2_mbus_framefmt *fmt)
+{
+	struct mtk_sv_hw *hw = sv->hw;
+	const int S = R_SENINF, C = R_CSI;
+	u32 o;
+	int i;
+
+	if (sv->port >= MTK_SV_NUM_PORTS ||
+	    (sv->cphy && sv->num_lanes != 3) || (!sv->cphy && sv->num_lanes != 4) ||
+	    (!sv->cphy && sv->link_freq * 2 > 2500000000LL))
+		return -EINVAL;	/* 4D1C ports only: 3 trios, or 4 lanes up to 2.5 Gbps */
+	if (!powered(hw))
+		return -EIO;
+	hw->port = sv->port;
+
+	/* reset */
+	fld(hw, S, SEN + 0x210, BIT(4), 1);
+	udelay(1);
+	fld(hw, S, SEN + 0x210, BIT(4), 0);
+	fld(hw, C, MACTOP + 0x00, BIT(0), 1);
+	udelay(1);
+	fld(hw, C, MACTOP + 0x00, BIT(0), 0);
+
+	/* VC/DT filter on the SENINF csi2: VC 0, DT 0x2b (RAW10) */
+	for (o = 0x20; o <= 0x3c; o += 4)
+		wr(hw, S, SEN + 0xa00 + o, 0);
+	for (o = 0x60; o <= 0x6c; o += 4)
+		wr(hw, S, SEN + 0xa00 + o, 0);
+	wr(hw, S, SEN + 0xa20, 0x002b0011);
+	wr(hw, S, SEN + 0xa60, 0x100);
+
+	/* PHY init */
+	phya_init(hw, PHYA, true);
+	phya_init(hw, PHYB, false);
+	dphy_timing(hw, sv->cphy);
+	fld(hw, C, CPHY + 0x18, BIT(4), 1);
+
+	/* MAC top (D-PHY or C-PHY, non-split), MAC CSI2 */
+	fld(hw, C, MACTOP + 0x00, BIT(16), 0);
+	wr(hw, C, MACTOP + 0x40, sv->cphy ? 0x2 : 0x1);
+	mac_fixed(hw, MACA, sv->cphy, sv->num_lanes);
+	mac_fixed(hw, MACB, sv->cphy, sv->num_lanes);
+	fld(hw, C, CPHY + 0x130, BIT(1), 0);	/* no LRTE */
+
+	/* SENINF: afifo pop 1T to 2T for this port, CSI2 + SENINF on */
+	fld(hw, S, SENTOP + 0x004, BIT(hw->port), 1);
+	fld(hw, S, SEN + 0x210, BIT(0), 1);
+	fld(hw, S, SEN + 0x200, BIT(0), 1);
+
+	if (sv->cphy)
+		cphy_setting(hw);
+	else
+		dphy_setting(hw, sv->link_freq);
+
+	/* seninf mux 0 (MUX1), source this SENINF */
 	fld(hw, S, MUX1 + 0xd00, BIT(0), 1);
 	fld(hw, S, MUX1 + 0xd04, GENMASK(3, 0), 8);
 	fld(hw, S, MUX1 + 0xd04, GENMASK(10, 8), PIX_MODE);
@@ -336,7 +437,7 @@ int mtk_sv_hw_seninf_start(struct mtk_sv *sv, const struct v4l2_mbus_framefmt *f
 	fld(hw, S, MUX1 + 0xd08, BIT(16) | BIT(17), 0);
 	wr(hw, S, MUX1 + 0xd00, rd(hw, S, MUX1 + 0xd00) | 0x6);
 	wr(hw, S, MUX1 + 0xd00, rd(hw, S, MUX1 + 0xd00) & ~0x6);
-	fld(hw, S, SENTOP + 0x010, GENMASK(4, 0), 4);
+	fld(hw, S, SENTOP + 0x010, GENMASK(4, 0), SENIDX);
 	wr(hw, S, MUX1 + 0xe00, 0x80);
 
 	/* cammux 10: outer page, then inner page */
@@ -365,8 +466,8 @@ void mtk_sv_hw_seninf_stop(struct mtk_sv *sv)
 		return;
 	fld(hw, R_SENINF, CAMMUXB + CAMMUX * 0x40, BIT(7), 0);
 	fld(hw, R_SENINF, MUX1 + 0xd00, BIT(0), 0);
-	fld(hw, R_SENINF, SEN5 + 0x200, BIT(0), 0);
-	fld(hw, R_SENINF, SEN5 + 0x210, BIT(0), 0);
+	fld(hw, R_SENINF, SEN + 0x200, BIT(0), 0);
+	fld(hw, R_SENINF, SEN + 0x210, BIT(0), 0);
 }
 
 int mtk_sv_hw_camsv_start(struct mtk_sv *sv, const struct v4l2_pix_format *pix)
