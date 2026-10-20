@@ -15,15 +15,15 @@
 &pio {
 	connsys_fem_pins: connsys-fem-pins {
 		/* wlan7207h (2.4 GHz) and wlan7207c (5 GHz) front-end control */
+		/* GPIO37, 39, 189, 191 and 192 are camera power GPIOs on this board. */
 		pins-wf0 {
 			pinmux = <0x2101>, <0x2201>, <0x2301>, <0x2401>,
-				 <0x2501>, <0xbf03>, <0x2701>, <0x2801>;
+				 <0x2801>;
 		};
 		/* GPIO42/43 stay off this list: stock leaves them in GPIO mode
 		 * with Wi-Fi on, and they are the speaker amp I2S4 BCK/LRCK. */
 		pins-wf1 {
-			pinmux = <0x2906>,
-				 <0xbd03>, <0xc003>, <0xbe03>, <0x2601>;
+			pinmux = <0x2906>, <0xbe03>, <0x2601>;
 		};
 	};
 };
