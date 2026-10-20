@@ -663,6 +663,22 @@
 	};
 };
 
+/* MT6375 charger PMIC: EINT 15, level low as on stock. */
+&i2c5 {
+	clock-frequency = <400000>;
+	status = "okay";
+
+	pmic@34 {
+		compatible = "mediatek,mt6375";
+		reg = <0x34>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
+
+		mt6375_chg: charger {
+			compatible = "mediatek,mt6375-charger";
+		};
+	};
+};
+
 &i2c11 {
 	#address-cells = <1>;
 	#size-cells = <0>;
@@ -673,6 +689,7 @@
 	fuel-gauge@55 {
 		compatible = "ti,bq27510g3";
 		reg = <0x55>;
+		power-supplies = <&mt6375_chg>;
 	};
 };
 
