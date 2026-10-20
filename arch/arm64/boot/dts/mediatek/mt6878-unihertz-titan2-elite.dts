@@ -105,6 +105,8 @@
 		simplefb@ff0cf000 {
 			compatible = "simple-framebuffer";
 			connector-type = "dsi";
+			/* page flips at the panel refresh, from titan2e-dsi-kick */
+			luma,panel-vblank;
 			reg = <0x0 0xff0cf000 0x0 0xf30000>;
 			width = <1080>;
 			height = <1200>;
