@@ -20022,6 +20022,14 @@ T:	git git://linuxtv.org/media.git
 F:	Documentation/devicetree/bindings/media/i2c/ovti,ov4689.yaml
 F:	drivers/media/i2c/ov4689.c
 
+OMNIVISION OV50D40 SENSOR DRIVER
+M:	Project Luma <builds@project-luma.local>
+L:	linux-media@vger.kernel.org
+S:	Maintained
+T:	git git://linuxtv.org/media.git
+F:	Documentation/devicetree/bindings/media/i2c/ovti,ov50d40.yaml
+F:	drivers/media/i2c/ov50d40.c
+
 OMNIVISION OV5640 SENSOR DRIVER
 M:	Steve Longerbeam <slongerbeam@gmail.com>
 L:	linux-media@vger.kernel.org
