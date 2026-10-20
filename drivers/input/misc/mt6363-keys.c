@@ -6,6 +6,9 @@
  * the key is held: power on bit 1, home on bit 3, home2 on bit 4. Each key
  * is a child node named after it with its linux,keycodes; boards remap the
  * home keys (the Titan 2 Elite's left shift is home2).
+ *
+ * Other PMIC functions described as child nodes (the AUXADC) are populated
+ * here and use this device's regmap.
  */
 
 #include <linux/bits.h>
@@ -13,6 +16,7 @@
 #include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_platform.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/spmi.h>
@@ -143,7 +147,8 @@ static int mt6363_keys_probe(struct spmi_device *sdev)
 	if (ret)
 		return ret;
 	device_init_wakeup(dev, true);
-	return 0;
+
+	return devm_of_platform_populate(dev);
 }
 
 static const struct of_device_id mt6363_keys_of_match[] = {
