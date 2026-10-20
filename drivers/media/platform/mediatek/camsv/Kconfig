@@ -3,3 +3,21 @@ config VIDEO_MT6878_CAM_M4U
 	tristate
 	depends on ARCH_MEDIATEK || COMPILE_TEST
 	depends on ARM64 && IOMMU_IO_PGTABLE_ARMV7S
+
+config VIDEO_MTK_SENINF_CAMSV
+	tristate "MediaTek MT6878 seninf + CAMSV raw capture"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on ARM64 && IOMMU_IO_PGTABLE_ARMV7S
+	depends on VIDEO_DEV && OF && PM
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	select VIDEOBUF2_DMA_SG
+	select VIDEO_MT6878_CAM_M4U
+	help
+	  Raw Bayer capture on MediaTek MT6878: the CSI-2 receiver (seninf)
+	  feeds a CAMSV DMA engine that writes frames through the MM M4U,
+	  without the ISP.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called mtk-seninf-camsv.
