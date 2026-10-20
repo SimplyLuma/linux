@@ -93,6 +93,7 @@ enum mtk_pmic_auxadc_channels {
 	PMIC_AUXADC_CHAN_VIN5,
 	PMIC_AUXADC_CHAN_VIN6,
 	PMIC_AUXADC_CHAN_VIN7,
+	PMIC_AUXADC_CHAN_VIN1_PU_OPEN,
 	PMIC_AUXADC_CHAN_IBAT,
 	PMIC_AUXADC_CHAN_VBAT,
 	PMIC_AUXADC_CHAN_MAX
@@ -367,6 +368,9 @@ static const struct iio_chan_spec mt6363_auxadc_channels[] = {
 	MTK_PMIC_IIO_CHAN(MT6363, in5_v, VIN5, 45, 15, IIO_VOLTAGE),
 	MTK_PMIC_IIO_CHAN(MT6363, in6_v, VIN6, 45, 15, IIO_VOLTAGE),
 	MTK_PMIC_IIO_CHAN(MT6363, in7_v, VIN7, 45, 15, IIO_VOLTAGE),
+
+	/* VIN1 without pull-up, for an external divider such as a board ID */
+	MTK_PMIC_IIO_CHAN(MT6363, in1_pu_open_v, VIN1_PU_OPEN, 45, 15, IIO_VOLTAGE),
 };
 
 static const struct mtk_pmic_auxadc_chan mt6363_auxadc_ch_desc[] = {
@@ -401,6 +405,9 @@ static const struct mtk_pmic_auxadc_chan mt6363_auxadc_ch_desc[] = {
 	MTK_PMIC_ADC_EXT_CHAN(VIN7,
 			      PMIC_AUXADC_RQST1, 4, PMIC_AUXADC_ADC0, 15,
 			      PMIC_AUXADC_SDMADC_CON0, 7, MT6363_PULLUP_RES_100K, 32, 1, 1),
+	MTK_PMIC_ADC_EXT_CHAN(VIN1_PU_OPEN,
+			      PMIC_AUXADC_RQST1, 4, PMIC_AUXADC_ADC0, 15,
+			      PMIC_AUXADC_SDMADC_CON0, 1, MT6363_PULLUP_RES_OPEN, 32, 1, 1),
 };
 
 static const u16 mt6363_auxadc_regs[] = {
