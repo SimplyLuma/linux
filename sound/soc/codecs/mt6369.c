@@ -5954,15 +5954,9 @@ static int mt6369_codec_probe(struct snd_soc_component *cmpnt)
 	return mt6369_codec_init_reg(cmpnt);
 }
 
-static void mt6369_codec_remove(struct snd_soc_component *cmpnt)
-{
-	snd_soc_component_exit_regmap(cmpnt);
-}
-
 static const struct snd_soc_component_driver mt6369_soc_component_driver = {
 	.name = CODEC_MT6369_NAME,
 	.probe = mt6369_codec_probe,
-	.remove = mt6369_codec_remove,
 	.controls = mt6369_snd_controls,
 	.num_controls = ARRAY_SIZE(mt6369_snd_controls),
 	.dapm_widgets = mt6369_dapm_widgets,
