@@ -236,6 +236,14 @@ SND_SOC_DAILINK_DEFS(capture0,
 	DAILINK_COMP_ARRAY(COMP_CPU("UL0")),
 	DAILINK_COMP_ARRAY(COMP_DUMMY()),
 	DAILINK_COMP_ARRAY(COMP_EMPTY()));
+SND_SOC_DAILINK_DEFS(hostless_speech,
+	DAILINK_COMP_ARRAY(COMP_CPU("Hostless Speech DAI")),
+	DAILINK_COMP_ARRAY(COMP_DUMMY()),
+	DAILINK_COMP_ARRAY(COMP_EMPTY()));
+SND_SOC_DAILINK_DEFS(modem_pcm,
+	DAILINK_COMP_ARRAY(COMP_CPU("PCM 1")),
+	DAILINK_COMP_ARRAY(COMP_DUMMY()),
+	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 SND_SOC_DAILINK_DEFS(spk_i2s,
 	DAILINK_COMP_ARRAY(COMP_CPU("I2SOUT4")),
 	DAILINK_COMP_ARRAY(COMP_DUMMY()),
@@ -286,12 +294,27 @@ static struct snd_soc_dai_link titan_dai_links[] = {
 		SND_SOC_DAILINK_REG(capture0),
 	},
 	{
+		/* opened for the duration of a call; moves no data */
+		.name = "Hostless_Speech",
+		.stream_name = "Hostless_Speech",
+		.trigger = {SND_SOC_DPCM_TRIGGER_PRE, SND_SOC_DPCM_TRIGGER_PRE},
+		.dynamic = 1,
+		.ignore_suspend = 1,
+		SND_SOC_DAILINK_REG(hostless_speech),
+	},
+	{
 		.name = "Speaker Amp",
 		.no_pcm = 1,
 		.playback_only = 1,
 		.ignore_suspend = 1,
 		.be_hw_params_fixup = titan_spk_fixup,
 		SND_SOC_DAILINK_REG(spk_i2s),
+	},
+	{
+		.name = "Modem PCM",
+		.no_pcm = 1,
+		.ignore_suspend = 1,
+		SND_SOC_DAILINK_REG(modem_pcm),
 	},
 	{
 		.name = "Primary Codec",
