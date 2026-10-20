@@ -354,23 +354,23 @@ static const struct iio_chan_spec mt6363_auxadc_channels[] = {
 	MTK_PMIC_IIO_CHAN(MT6363, cdt_v, VCDT, 2, 12, IIO_TEMP),
 	MTK_PMIC_IIO_CHAN(MT6363, batt_temp, BAT_TEMP, 3, 12, IIO_TEMP),
 	MTK_PMIC_IIO_CHAN(MT6363, chip_temp, CHIP_TEMP, 4, 12, IIO_TEMP),
-	MTK_PMIC_IIO_CHAN(MT6363, sys_sns_v, VSYSSNS, 6, 15, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6363, sys_sns_v, VSYSSNS, 40, 15, IIO_VOLTAGE),
 	MTK_PMIC_IIO_CHAN(MT6363, tref_v, VTREF, 11, 12, IIO_VOLTAGE),
 	MTK_PMIC_IIO_CHAN(MT6363, vcore_temp, VCORE_TEMP, 38, 12, IIO_TEMP),
 	MTK_PMIC_IIO_CHAN(MT6363, vproc_temp, VPROC_TEMP, 39, 12, IIO_TEMP),
 	MTK_PMIC_IIO_CHAN(MT6363, vgpu_temp, VGPU_TEMP, 40, 12, IIO_TEMP),
 
-	/* For VIN, ADC12 holds the result depending on which GPIO was activated */
-	MTK_PMIC_IIO_CHAN(MT6363, in1_v, VIN1, 45, 15, IIO_VOLTAGE),
-	MTK_PMIC_IIO_CHAN(MT6363, in2_v, VIN2, 45, 15, IIO_VOLTAGE),
-	MTK_PMIC_IIO_CHAN(MT6363, in3_v, VIN3, 45, 15, IIO_VOLTAGE),
-	MTK_PMIC_IIO_CHAN(MT6363, in4_v, VIN4, 45, 15, IIO_VOLTAGE),
-	MTK_PMIC_IIO_CHAN(MT6363, in5_v, VIN5, 45, 15, IIO_VOLTAGE),
-	MTK_PMIC_IIO_CHAN(MT6363, in6_v, VIN6, 45, 15, IIO_VOLTAGE),
-	MTK_PMIC_IIO_CHAN(MT6363, in7_v, VIN7, 45, 15, IIO_VOLTAGE),
+	/* For VIN, ADC_CH12 holds the result depending on which GPIO was activated */
+	MTK_PMIC_IIO_CHAN(MT6363, in1_v, VIN1, 37, 15, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6363, in2_v, VIN2, 37, 15, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6363, in3_v, VIN3, 37, 15, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6363, in4_v, VIN4, 37, 15, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6363, in5_v, VIN5, 37, 15, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6363, in6_v, VIN6, 37, 15, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6363, in7_v, VIN7, 37, 15, IIO_VOLTAGE),
 
 	/* VIN1 without pull-up, for an external divider such as a board ID */
-	MTK_PMIC_IIO_CHAN(MT6363, in1_pu_open_v, VIN1_PU_OPEN, 45, 15, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6363, in1_pu_open_v, VIN1_PU_OPEN, 37, 15, IIO_VOLTAGE),
 };
 
 static const struct mtk_pmic_auxadc_chan mt6363_auxadc_ch_desc[] = {
@@ -417,6 +417,7 @@ static const u16 mt6363_auxadc_regs[] = {
 	[PMIC_AUXADC_ADC0]	= 0x1088,
 	[PMIC_AUXADC_IMP0]	= 0x1208,
 	[PMIC_AUXADC_IMP1]	= 0x1209,
+	[PMIC_AUXADC_SDMADC_CON0]	= 0x11c4,
 };
 
 static const struct iio_chan_spec mt6373_auxadc_channels[] = {
@@ -425,12 +426,12 @@ static const struct iio_chan_spec mt6373_auxadc_channels[] = {
 	MTK_PMIC_IIO_CHAN(MT6363, vproc_temp, VPROC_TEMP, 39, 12, IIO_TEMP),
 	MTK_PMIC_IIO_CHAN(MT6363, vgpu_temp, VGPU_TEMP, 40, 12, IIO_TEMP),
 
-	/* For VIN, ADC12 holds the result depending on which GPIO was activated */
-	MTK_PMIC_IIO_CHAN(MT6363, in1_v, VIN1, 45, 15, IIO_VOLTAGE),
-	MTK_PMIC_IIO_CHAN(MT6363, in2_v, VIN2, 45, 15, IIO_VOLTAGE),
-	MTK_PMIC_IIO_CHAN(MT6363, in3_v, VIN3, 45, 15, IIO_VOLTAGE),
-	MTK_PMIC_IIO_CHAN(MT6363, in4_v, VIN4, 45, 15, IIO_VOLTAGE),
-	MTK_PMIC_IIO_CHAN(MT6363, in5_v, VIN5, 45, 15, IIO_VOLTAGE),
+	/* For VIN, ADC_CH12 holds the result depending on which GPIO was activated */
+	MTK_PMIC_IIO_CHAN(MT6363, in1_v, VIN1, 37, 15, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6363, in2_v, VIN2, 37, 15, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6363, in3_v, VIN3, 37, 15, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6363, in4_v, VIN4, 37, 15, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6363, in5_v, VIN5, 37, 15, IIO_VOLTAGE),
 };
 
 static const struct mtk_pmic_auxadc_chan mt6373_auxadc_ch_desc[] = {
