@@ -137,6 +137,15 @@ config LEDS_AW200XX
 	  To compile this driver as a module, choose M here: the module
 	  will be called leds-aw200xx.
 
+config LEDS_AW36404
+	tristate "LED support for the Awinic AW36404 in torch mode"
+	depends on LEDS_CLASS
+	depends on GPIOLIB || COMPILE_TEST
+	help
+	  The Awinic AW36404 is a 1-wire pulse dimmed LED driver. This
+	  driver runs it in torch mode as a plain LED, within the current
+	  steps the board allows.
+
 config LEDS_AW2013
 	tristate "LED support for Awinic AW2013"
 	depends on LEDS_CLASS && I2C && OF
