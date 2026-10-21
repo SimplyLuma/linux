@@ -27,6 +27,13 @@
 	};
 
 
+	vibrator {
+		compatible = "regulator-haptic";
+		haptic-supply = <&mt6369_vibr>;
+		min-microvolt = <2000000>;
+		max-microvolt = <2000000>;
+	};
+
 	mt6369_codec: audio-codec {
 		compatible = "mediatek,mt6369-sound";
 		mediatek,pmic = <&mt6369>;
@@ -255,6 +262,14 @@
 					regulator-max-microvolt = <3000000>;
 					/* Bring-up: keep the touch controller powered across driver reloads. */
 					regulator-always-on;
+				};
+
+				/* Stock runs the motor at 2.0 V (VOSEL 5, no trim). */
+				mt6369_vibr: vibr {
+					regulator-name = "vibr";
+					regulator-min-microvolt = <2000000>;
+					regulator-max-microvolt = <2000000>;
+					regulator-enable-ramp-delay = <680>;
 				};
 			};
 		};
