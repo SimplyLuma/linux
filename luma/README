@@ -1,0 +1,15 @@
+Build of the Titan 2 Elite test boot image (boot.bin) from this commit.
+
+  cp luma/titan2e-alpha.config O/.config  (set CONFIG_TITAN2E_BUILTIN_DTB_PATH
+  and CONFIG_INITRAMFS_SOURCE to absolute paths)
+  make O=O ARCH=arm64 LLVM=1 KERNELRELEASE=7.2.0-luma-titan2e-m2-g5288ca7d6566 \
+    mediatek/mt6878-unihertz-titan2-elite.dtb
+  cp O/arch/arm64/boot/dts/mediatek/mt6878-unihertz-titan2-elite.dtb <TITAN2E_BUILTIN_DTB_PATH>
+  make O=O ARCH=arm64 LLVM=1 KERNELRELEASE=7.2.0-luma-titan2e-m2-g5288ca7d6566 Image
+
+KBUILD_BUILD_TIMESTAMP is the commit time of 5288ca7d6. The initramfs is the
+one in the Titan 2 Elite Alpha boot image: BusyBox from
+busybox-1.37.0-7.fc44.aarch64 and config/mobile/titan2e-initramfs/init from
+SimplyLuma/luma devices/titan2elite. Image.lz4 (lz4 -l -12) is packed with
+AOSP mkbootimg (header v4, empty ramdisk and command line) and an avbtool
+hash footer for a 64 MiB boot partition, signed with the AOSP test key.
