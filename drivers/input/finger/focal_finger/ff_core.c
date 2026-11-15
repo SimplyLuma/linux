@@ -469,7 +469,7 @@ static int ff_ctl_get_version(ff_context_t *ff_ctx, unsigned long arg)
     char version[FF_DRV_VERSION_LEN] = { 0 };
 
     FF_LOGD("'%s' enter.", __func__);
-    strncpy(version, FF_DRV_VERSION, FF_DRV_VERSION_LEN);
+    strscpy_pad(version, FF_DRV_VERSION);
     if (copy_to_user((void *)arg, version, FF_DRV_VERSION_LEN)) {
         FF_LOGE("copy_to_user(version) failed.");
         return (-EFAULT);
