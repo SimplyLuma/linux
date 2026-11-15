@@ -72,7 +72,7 @@ static const struct tz_cp_config tz_cp_config_vpu2[] = {
 };
 
 const struct iris_platform_data milos_data = {
-	.firmware_desc_gen1 = &iris_milos_desc,
+	.firmware_desc = &iris_milos_desc,
 	.vpu_ops = &iris_vpu2_ops,
 	.icc_tbl = iris_icc_info_milos,
 	.icc_tbl_size = ARRAY_SIZE(iris_icc_info_milos),
