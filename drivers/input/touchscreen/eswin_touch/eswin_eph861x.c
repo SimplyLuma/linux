@@ -1464,6 +1464,15 @@ static int eph_start(struct eph_data *ephdata)
     switch (ephdata->ephplatform->suspend_mode)
     {
         case EPH_SUSPEND_REGULATOR:
+            #if (ESWIN_EPH861X_SPI)
+            /*
+             * eph_stop() only masked the interrupt: the controller kept
+             * running and may hold a report nobody read. Reset it before
+             * unmasking, as the vendor wake path does.
+             */
+            eph_reset_device(ephdata);
+            dev_info(&commsdevice->dev, "%s, reset done, chg %d\n", __func__, eph_read_chg(ephdata));
+            #endif
             enable_irq(ephdata->chg_irq);
             #if (ESWIN_EPH861X_I2C)
             /* TODO Pixel4XL specific - Temporary comment out diabling/enable of regulator due to demo handset specific issues */
