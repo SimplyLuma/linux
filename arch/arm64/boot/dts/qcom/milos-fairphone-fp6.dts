@@ -1593,3 +1593,130 @@
 
 	status = "okay";
 };
+
+/*
+ * QSEECom pools and contract, and the FT9362 fingerprint sensor. These were
+ * device-tree overlays applied to the built DTB (luma/fp6/alpha1/dtb in the
+ * Alpha 1 tree). The pool node names and the aliases follow the vendor DT,
+ * which the bootloader reads (qcom,appsbl-qseecom-support).
+ */
+/ {
+	aliases {
+		qcom_qseecom = &qseecom;
+		qseecom_mem = &qseecom_apps_pool;
+		qseecom_ta_mem = &qseecom_ta_pool;
+	};
+
+	focalfp_ft9362: focalfp-ft9362 {
+		compatible = "focaltech,fp";
+		interrupt-parent = <&tlmm>;
+		interrupts = <75 IRQ_TYPE_EDGE_RISING>;
+		irq-gpios = <&tlmm 75 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&tlmm 74 GPIO_ACTIVE_HIGH>;
+		vdd-gpios = <&tlmm 29 GPIO_ACTIVE_HIGH>;
+		focaltech_fp,irq-gpio = <&tlmm 75 GPIO_ACTIVE_HIGH>;
+		focaltech_fp,reset-gpio = <&tlmm 74 GPIO_ACTIVE_HIGH>;
+		focaltech_fp,vdd-gpio = <&tlmm 29 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "fpsensor_finger_rst_low",
+				"fpsensor_finger_rst_high",
+				"fpsensor_eint_as_int",
+				"fpsensor_finger_power_low",
+				"fpsensor_finger_power_high";
+		pinctrl-0 = <&fingerprint_pins_rst_output0>;
+		pinctrl-1 = <&fingerprint_pins_rst_output1>;
+		pinctrl-2 = <&fingerprint_pins_eint_as_int>;
+		pinctrl-3 = <&fingerprint_pins_power_output0>;
+		pinctrl-4 = <&fingerprint_pins_power_output1>;
+	};
+
+	reserved-memory {
+		/* QSEE application heap, 4 MiB-aligned, below 4 GiB for SCM's 32-bit DMA window */
+		qseecom_apps_pool: qseecom_region {
+			compatible = "shared-dma-pool";
+			size = <0x0 0x01400000>;
+			alignment = <0x0 0x00400000>;
+			alloc-ranges = <0x0 0x80000000 0x0 0x80000000>;
+			reusable;
+		};
+
+		/* QSEE trusted-application image staging */
+		qseecom_ta_pool: qseecom_ta_region {
+			compatible = "shared-dma-pool";
+			size = <0x0 0x01000000>;
+			alignment = <0x0 0x00400000>;
+			alloc-ranges = <0x0 0x80000000 0x0 0x80000000>;
+			reusable;
+		};
+	};
+};
+
+&scm {
+	luma,qsee-log-diagnostic;
+
+	qseecom-tee-heaps {
+		compatible = "luma,qseecom-tee-heaps";
+		luma,dedicated-heaps;
+		memory-region = <&qseecom_ta_pool>, <&qseecom_apps_pool>;
+		memory-region-names = "ta", "apps";
+	};
+};
+
+&soc {
+	qseecom: qseecom@c1700000 {
+		compatible = "qcom,qseecom";
+		memory-region = <&qseecom_apps_pool>;
+		qseecom_mem = <&qseecom_apps_pool>;
+		qseecom_ta_mem = <&qseecom_ta_pool>;
+		qcom,no-user-contig-mem-support;
+		qcom,hlos-num-ce-hw-instances = <1>;
+		qcom,hlos-ce-hw-instance = <0>;
+		qcom,qsee-ce-hw-instance = <0>;
+		qcom,disk-encrypt-pipe-pair = <2>;
+		qcom,no-clock-support;
+		qcom,appsbl-qseecom-support;
+		qcom,commonlib64-loaded-by-uefi;
+		qcom,qsee-reentrancy-support = <2>;
+	};
+};
+
+&tlmm {
+	fingerprint_pins_rst_output0: focaltech-reset-low-state {
+		pins = "gpio74";
+		function = "gpio";
+		drive-strength = <2>;
+		output-low;
+		bias-disable;
+	};
+
+	fingerprint_pins_rst_output1: focaltech-reset-high-state {
+		pins = "gpio74";
+		function = "gpio";
+		drive-strength = <2>;
+		output-high;
+		bias-disable;
+	};
+
+	fingerprint_pins_eint_as_int: focaltech-irq-active-state {
+		pins = "gpio75";
+		function = "gpio";
+		drive-strength = <2>;
+		input-enable;
+		bias-disable;
+	};
+
+	fingerprint_pins_power_output0: focaltech-power-low-state {
+		pins = "gpio29";
+		function = "gpio";
+		drive-strength = <2>;
+		output-low;
+		bias-disable;
+	};
+
+	fingerprint_pins_power_output1: focaltech-power-high-state {
+		pins = "gpio29";
+		function = "gpio";
+		drive-strength = <2>;
+		output-high;
+		bias-disable;
+	};
+};
