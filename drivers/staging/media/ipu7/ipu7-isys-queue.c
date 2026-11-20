@@ -776,6 +776,13 @@ void ipu7_isys_queue_buf_ready(struct ipu7_isys_stream *stream,
 
 		ipu7_isys_buf_calc_sequence_time(ib, time);
 
+		/*
+		 * The firmware still releases the buffer of a frame it failed
+		 * to capture. Its contents are not an image.
+		 */
+		if (!IA_GOFO_MSG_ERR_IS_OK(info->error_info))
+			atomic_set(&ib->str2mmio_flag, 1);
+
 		ipu7_isys_queue_buf_done(ib);
 
 		return;
