@@ -398,6 +398,19 @@ config TOUCHSCREEN_GOODIX
 	  To compile this driver as a module, choose M here: the
 	  module will be called goodix.
 
+config TOUCHSCREEN_GOODIX_GT9886
+	tristate "Goodix GT9886 I2C touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have a Goodix GT9886 touchscreen connected
+	  to your system via I2C (found on the OnePlus Nord). The driver
+	  uses the firmware and configuration already in the controller.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called goodix_gt9886.
+
 config TOUCHSCREEN_GOODIX_BERLIN_CORE
 	tristate
 
@@ -1413,5 +1426,17 @@ config TOUCHSCREEN_HIMAX_HX83112B
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called himax_hx83112b.
+
+config TOUCHSCREEN_STFTS_SPI
+	tristate "ST FingerTipS SPI touchscreen"
+	depends on SPI && GPIOLIB && REGULATOR
+	help
+	  SPI transport for the ST FingerTipS controller used on the Google
+	  Pixel 5a (barbet), using the firmware installed on the controller.
+	  Reports multitouch input and supports system sleep/resume. Firmware
+	  updates and sensor-DSP gesture wake are not supported.
+
+	  To compile this driver as a module, choose M here. The module will
+	  be called stfts-spi.
 
 endif

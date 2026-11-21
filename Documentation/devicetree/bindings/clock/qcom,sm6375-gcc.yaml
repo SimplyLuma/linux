@@ -4,7 +4,7 @@
 $id: http://devicetree.org/schemas/clock/qcom,sm6375-gcc.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Qualcomm Global Clock & Reset Controller on SM6375
+title: Qualcomm Global Clock & Reset Controller on SM6375 and SM7250
 
 maintainers:
   - Konrad Dybcio <konradybcio@kernel.org>
@@ -20,7 +20,9 @@ allOf:
 
 properties:
   compatible:
-    const: qcom,sm6375-gcc
+    enum:
+      - qcom,sm6375-gcc
+      - qcom,sm7250-gcc
 
   clocks:
     items:

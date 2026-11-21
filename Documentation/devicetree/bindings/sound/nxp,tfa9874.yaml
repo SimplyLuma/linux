@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/nxp,tfa9874.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP/Goodix TFA9874 (TFA2) Audio Amplifier
+
+maintainers:
+  - lazybrar <211365301+lazybrar@users.noreply.github.com>
+
+description:
+  Mono class-D speaker amplifier with an I2C control interface and an I2S/TDM
+  audio input. The built-in CoolFlux DSP is not used by the driver.
+
+allOf:
+  - $ref: dai-common.yaml#
+
+properties:
+  compatible:
+    const: nxp,tfa9874
+
+  reg:
+    maxItems: 1
+
+  '#sound-dai-cells':
+    const: 0
+
+  reset-gpios:
+    description:
+      GPIO connected to the reset line of the amplifier. The driver asserts
+      it on probe and releases it after 5 ms.
+    maxItems: 1
+
+  sound-name-prefix: true
+
+  vddd-supply:
+    description: regulator phandle for the VDDD (1.8 V digital) power supply.
+
+required:
+  - compatible
+  - reg
+  - '#sound-dai-cells'
+  - vddd-supply
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      audio-codec@34 {
+        compatible = "nxp,tfa9874";
+        reg = <0x34>;
+        reset-gpios = <&tlmm 125 GPIO_ACTIVE_LOW>;
+        vddd-supply = <&vreg_s4a_1p8>;
+        #sound-dai-cells = <0>;
+      };
+    };

@@ -377,6 +377,19 @@ static int venus_add_dynamic_nodes(struct venus_core *core)
 static void venus_remove_dynamic_nodes(struct venus_core *core) {}
 #endif
 
+/*
+ * The interconnect paths are only used for bandwidth votes. Allow platforms
+ * whose interconnect provider is not described yet to probe without them;
+ * icc_set_bw() is a no-op for a NULL path.
+ */
+static struct icc_path *venus_icc_get(struct device *dev, const char *name)
+{
+	if (!of_property_present(dev->of_node, "interconnects"))
+		return NULL;
+
+	return devm_of_icc_get(dev, name);
+}
+
 static int venus_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -393,11 +406,11 @@ static int venus_probe(struct platform_device *pdev)
 	if (IS_ERR(core->base))
 		return PTR_ERR(core->base);
 
-	core->video_path = devm_of_icc_get(dev, "video-mem");
+	core->video_path = venus_icc_get(dev, "video-mem");
 	if (IS_ERR(core->video_path))
 		return PTR_ERR(core->video_path);
 
-	core->cpucfg_path = devm_of_icc_get(dev, "cpu-cfg");
+	core->cpucfg_path = venus_icc_get(dev, "cpu-cfg");
 	if (IS_ERR(core->cpucfg_path))
 		return PTR_ERR(core->cpucfg_path);
 
@@ -995,6 +1008,49 @@ static const struct venus_resources sc7180_res = {
 	.enc_nodename = "video-encoder",
 };
 
+static const struct freq_tbl sm7250_freq_table[] = {
+	{ 0, 365000000 },
+	{ 0, 338000000 },
+	{ 0, 240000000 },
+};
+
+/* techpack/video/msm/vidc/hfi_iris1.c:55 __clock_config_on_enable_iris1() */
+static const struct reg_val sm7250_reg_preset[] = {
+	{ 0xe2010, 0 },	/* WRAPPER_CPU_CGC_DIS */
+	{ 0xe2000, 0 },	/* WRAPPER_CPU_CLOCK_CONFIG */
+};
+
+static const struct venus_resources sm7250_res = {
+	.reg_tbl = sm7250_reg_preset,
+	.reg_tbl_size = ARRAY_SIZE(sm7250_reg_preset),
+	.freq_tbl = sm7250_freq_table,
+	.freq_tbl_size = ARRAY_SIZE(sm7250_freq_table),
+	.clks = {"core", "iface", "bus" },
+	.clks_num = 3,
+	.vcodec0_clks = { "vcodec0_core", "vcodec0_bus" },
+	.vcodec_clks_num = 2,
+	.vcodec_pmdomains = (const char *[]) { "venus", "vcodec0" },
+	.vcodec_pmdomains_num = 2,
+	.opp_pmdomain = (const char *[]) { "cx" },
+	.opp_pmdomain_num = 1,
+	.vcodec_num = 1,
+	.hfi_version = HFI_VERSION_4XX,
+	.vpu_version = VPU_VERSION_IRIS1,
+	.max_load = 1958400,	/* msm_vidc_platform.c:931 qcom,max-hw-load */
+	.num_vpp_pipes = 2,
+	.vmem_id = VIDC_RESOURCE_NONE,
+	.vmem_size = 0,
+	.vmem_addr = 0,
+	.dma_mask = 0xe0000000 - 1,
+	.cp_start = 0,
+	.cp_size = 0x25800000,
+	.cp_nonpixel_start = 0x1000000,
+	.cp_nonpixel_size = 0x24800000,
+	.fwname = "qcom/vpu-1.2/venus.mbn",
+	.dec_nodename = "video-decoder",
+	.enc_nodename = "video-encoder",
+};
+
 #if (!IS_ENABLED(CONFIG_VIDEO_QCOM_IRIS))
 static const struct freq_tbl sm8250_freq_table[] = {
 	{ 0, 444000000 },
@@ -1177,6 +1233,7 @@ static const struct of_device_id venus_dt_match[] = {
 	{ .compatible = "qcom,msm8998-venus", .data = &msm8998_res, },
 	{ .compatible = "qcom,qcm2290-venus", .data = &qcm2290_res, },
 	{ .compatible = "qcom,sc7180-venus", .data = &sc7180_res, },
+	{ .compatible = "qcom,sm7250-venus", .data = &sm7250_res, },
 	{ .compatible = "qcom,sdm660-venus", .data = &sdm660_res, },
 	{ .compatible = "qcom,sdm845-venus", .data = &sdm845_res, },
 	{ .compatible = "qcom,sdm845-venus-v2", .data = &sdm845_res_v2, },

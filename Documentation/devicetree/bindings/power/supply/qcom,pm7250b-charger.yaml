@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/power/supply/qcom,pm7250b-charger.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm PM7250B SMB5 battery charger (status and charge inhibit)
+
+maintainers:
+  - Claude <noreply@anthropic.com>
+
+description:
+  The SMB5 switch-mode charger inside the PM7250B PMIC. This binding covers a
+  minimal driver that reports charger and USB input state and can stop or
+  resume charging. It never programs voltage or current limits.
+
+properties:
+  compatible:
+    const: qcom,pm7250b-charger
+
+  reg:
+    maxItems: 1
+    description: Base address of the CHGR peripheral (0x1000)
+
+required:
+  - compatible
+  - reg
+
+allOf:
+  - $ref: power-supply.yaml#
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    pmic {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        charger@1000 {
+            compatible = "qcom,pm7250b-charger";
+            reg = <0x1000>;
+        };
+    };

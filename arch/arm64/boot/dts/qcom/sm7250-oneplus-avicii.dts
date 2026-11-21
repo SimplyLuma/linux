@@ -1,0 +1,1169 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * OnePlus Nord (avicii) - milestone 1: initramfs, USB gadget, ramoops.
+ * Milestone 2: internal UFS, TLMM, rpmh regulators, reboot-mode.
+ * Milestone 3: display (MDSS/DPU/DSI0 + Samsung AMS644VK04 panel).
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
+#include <dt-bindings/input/linux-event-codes.h>
+#include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator.h>
+#include <dt-bindings/sound/qcom,q6asm.h>
+
+/* PM7250B is configured to use SID2/3 */
+#define PM7250B_SID 2
+#define PM7250B_SID1 3
+
+#include "sm7250.dtsi"
+#include "pm8150.dtsi"
+#include "pm8150l.dtsi"
+#include "pm7250b.dtsi"
+
+/ {
+	model = "OnePlus Nord";
+	compatible = "oneplus,avicii", "qcom,sm7250";
+	chassis-type = "handset";
+
+	/* required for bootloader to select correct board */
+	qcom,msm-id = <0x190 0x10000 0x1b8 0x10000>;
+	qcom,board-id = <8 0>;
+
+	aliases {
+		serial1 = &uart5;
+	};
+
+	chosen {
+	};
+
+	/* The bootloader fills in the memory size */
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x0 0x80000000 0x0 0x0>;
+	};
+
+	reserved-memory {
+		/*
+		 * Downstream: 0xcbe00000 + 0x400000 including a 0x1000
+		 * OnePlus-only devinfo zone at the end. Mainline has no such
+		 * zone, so shrink the region by 0x1000; this keeps the
+		 * console zone at the same address as with the downstream
+		 * pstore layout.
+		 */
+		ramoops@cbe00000 {
+			compatible = "ramoops";
+			reg = <0x0 0xcbe00000 0x0 0x3ff000>;
+			record-size = <0x40000>;
+			console-size = <0x40000>;
+			ftrace-size = <0x40000>;
+			pmsg-size = <0x200000>;
+			no-map;
+		};
+
+		param_mem: param@cc200000 {
+			reg = <0x0 0xcc200000 0x0 0x100000>;
+			no-map;
+		};
+
+		mtp_mem: mtp@cc300000 {
+			reg = <0x0 0xcc300000 0x0 0xb00000>;
+			no-map;
+		};
+
+		kboot_uboot_logmem: kboot-logmem@b8200000 {
+			reg = <0x0 0xb8200000 0x0 0x100000>;
+			no-map;
+		};
+	};
+};
+
+&apps_rsc {
+	regulators-0 {
+		compatible = "qcom,pm8150-rpmh-regulators";
+		qcom,pmic-id = "a";
+
+		/* Downstream: smpa4 1.8 V fixed (UFS vccq2) */
+		/*
+		 * All rails here are on when the bootloader hands over and several are
+		 * shared system rails (s4a is the main 1.8 V). Linux is the only RPMh
+		 * voter on this boot, so a consumer disabling one (ufshcd does after a
+		 * failed probe) powers the phone off: PMIC reports "vdd_shutdown".
+		 */
+		vreg_s4a_1p8: smps4 {
+			regulator-name = "vreg_s4a_1p8";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-boot-on;
+			regulator-always-on;
+		};
+
+		/* Downstream: ldoa2 2.7 - 3.3 V (USB PHY wants 3.05 - 3.3 V) */
+		vreg_l2a_3p1: ldo2 {
+			regulator-name = "vreg_l2a_3p1";
+			regulator-min-microvolt = <3072000>;
+			regulator-max-microvolt = <3072000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-boot-on;
+			regulator-always-on;
+		};
+
+		/* Downstream: ldoa5 0.72 - 1.056 V (USB PHY vdd and UFS PHY vdda: 0.88 V) */
+		vreg_l5a_0p88: ldo5 {
+			regulator-name = "vreg_l5a_0p88";
+			regulator-min-microvolt = <880000>;
+			regulator-max-microvolt = <880000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-boot-on;
+			regulator-always-on;
+		};
+
+		/* Downstream: ldoa9 1.16 - 1.32 V (UFS PHY PLL) */
+		vreg_l9a_1p2: ldo9 {
+			regulator-name = "vreg_l9a_1p2";
+			regulator-min-microvolt = <1200000>;
+			regulator-max-microvolt = <1200000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-boot-on;
+			regulator-always-on;
+		};
+
+		/* Downstream: ldoa13 ("pm8150_l13") 3.008 - 3.3 V, touchscreen vdd */
+		vreg_l13a_3p0: ldo13 {
+			regulator-name = "vreg_l13a_3p0";
+			regulator-min-microvolt = <3008000>;
+			regulator-max-microvolt = <3008000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-boot-on;
+		};
+
+		/* Downstream: ldoa12 1.71 - 1.89 V */
+		vreg_l12a_1p8: ldo12 {
+			regulator-name = "vreg_l12a_1p8";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-boot-on;
+			regulator-always-on;
+		};
+
+		/*
+		 * Downstream: ldoa16 ("pm8150_l16") 3.0 - 3.3 V, init 3.0 V,
+		 * proxy-voted by the bootloader. Panel vdd (3.0 V). Possibly
+		 * shared with other, not yet described, consumers: never let
+		 * the panel driver or the late cleanup switch it off.
+		 */
+		vreg_l16a_3p0: ldo16 {
+			regulator-name = "vreg_l16a_3p0";
+			regulator-min-microvolt = <3000000>;
+			regulator-max-microvolt = <3000000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-boot-on;
+			regulator-always-on;
+		};
+	};
+
+	regulators-1 {
+		compatible = "qcom,pm8150l-rpmh-regulators";
+		qcom,pmic-id = "c";
+
+		/*
+		 * Downstream: ldoc7 ("pm8150a_l7") 2.704 - 3.304 V; the UFS
+		 * node asks for vcc-voltage-level 2.95 - 2.96 V.
+		 */
+		vreg_l7c_2p95: ldo7 {
+			regulator-name = "vreg_l7c_2p95";
+			regulator-min-microvolt = <2950000>;
+			regulator-max-microvolt = <2960000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-boot-on;
+			regulator-always-on;
+		};
+
+		/*
+		 * Downstream: ldoc1 ("pm8150a_l1") 1.8 - 1.9 V, init 1.8 V,
+		 * proxy-voted by the bootloader. Panel vddio (1.8 V); also the
+		 * 1.8 V supply of the Goodix touchscreen, so keep it always on.
+		 */
+		vreg_l1c_1p8: ldo1 {
+			regulator-name = "vreg_l1c_1p8";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-boot-on;
+			regulator-always-on;
+		};
+
+		/*
+		 * Downstream: ldoc3 ("pm8150a_l3") 1.136 - 1.303 V, init
+		 * 1.136 V. Panel vout (1.28 V), only used by the panel and not
+		 * proxy-voted, so left to the panel driver to switch.
+		 */
+		vreg_l3c_1p28: ldo3 {
+			regulator-name = "vreg_l3c_1p28";
+			regulator-min-microvolt = <1280000>;
+			regulator-max-microvolt = <1280000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+	};
+};
+
+/ {
+	/* 1.8 V of the touchscreen and its I2C pull-ups, switched by pm8150l gpio1 */
+	ts_vddio: regulator-ts-vddio {
+		compatible = "regulator-fixed";
+		regulator-name = "ts_vddio_1p8";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		gpio = <&pm8150l_gpios 1 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		vin-supply = <&vreg_l1c_1p8>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ts_vddio_default>;
+	};
+};
+
+&gmu {
+	status = "okay";
+};
+
+&gpu {
+	status = "okay";
+
+	zap-shader {
+		firmware-name = "qcom/sm7250/oneplus/avicii/a620_zap.mdt";
+	};
+};
+
+&mdss {
+	status = "okay";
+};
+
+&mdss_mdp {
+	status = "okay";
+};
+
+&mdss_dsi0 {
+	vdda-supply = <&vreg_l9a_1p2>;
+
+	status = "okay";
+
+	panel@0 {
+		compatible = "samsung,ams644vk04";
+		reg = <0>;
+
+		vddio-supply = <&ts_vddio>;
+		vdd-supply = <&vreg_l16a_3p0>;
+		vout-supply = <&vreg_l3c_1p28>;
+
+		/*
+		 * Downstream reset sequence is <1 10ms 0 10ms 1 10ms> on the
+		 * raw pin level, flags 0: the pin is low while the panel is
+		 * in reset, i.e. the reset line is active low.
+		 */
+		reset-gpios = <&pm8150l_gpios 3 GPIO_ACTIVE_LOW>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&mdp_vsync_te_active>, <&panel_reset_default>;
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&mdss_dsi0_out>;
+			};
+		};
+	};
+};
+
+&mdss_dsi0_out {
+	remote-endpoint = <&panel_in>;
+	data-lanes = <0 1 2 3>;
+	/* downstream qcom,panel-te-source = <0>, TE on TLMM gpio10 */
+	qcom,te-source = "mdp_vsync_p";
+};
+
+&mdss_dsi0_phy {
+	vdds-supply = <&vreg_l5a_0p88>;
+
+	status = "okay";
+};
+
+&pm8150l_gpios {
+	/* Downstream enable1v8_gpio of the Goodix touchscreen */
+	ts_vddio_default: ts-vddio-default-state {
+		pins = "gpio1";
+		function = "normal";
+		power-source = <0>;
+		bias-disable;
+		output-low;
+		qcom,drive-strength = <PMIC_GPIO_STRENGTH_LOW>;
+	};
+
+	/* Downstream disp_pins_default; pin held low = panel in reset */
+	panel_reset_default: panel-reset-default-state {
+		pins = "gpio3";
+		function = "normal";
+		power-source = <0>;
+		bias-disable;
+		output-low;
+		qcom,drive-strength = <PMIC_GPIO_STRENGTH_MED>;
+	};
+};
+
+/*
+ * Camera flash and torch: one LED on PM8150L flash channels 0 and 1
+ * (downstream flash_0/flash_1 and torch_0/torch_1, both used as one source
+ * by the rear camera). Flash 1500 mA max, 1280 ms timeout; torch 500 mA max.
+ */
+&pm8150l_flash {
+	status = "okay";
+
+	led-0 {
+		function = LED_FUNCTION_FLASH;
+		color = <LED_COLOR_ID_WHITE>;
+		led-sources = <1>, <2>;
+		led-max-microamp = <500000>;
+		flash-max-microamp = <1500000>;
+		flash-max-timeout-us = <1280000>;
+	};
+};
+
+&pon {
+	/* PON_SOFT_RB_SPARE values, downstream PON_RESTART_REASON_* */
+	mode-bootloader = <0x2>;
+	mode-recovery = <0x1>;
+};
+
+&tlmm {
+	/*
+	 * Owned by TZ, reading them kills the system: SE1 SPI (NFC secure
+	 * element, gpio0-3, not probed) and SE6 SPI (fingerprint, gpio59-62,
+	 * confirmed: boot dies on gpio59).
+	 */
+	gpio-reserved-ranges = <0 4>, <59 4>;
+
+	/* Touchscreen interrupt and reset, downstream ts_int_active / ts_reset_active */
+	ts_int_default: ts-int-default-state {
+		pins = "gpio9";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	ts_reset_default: ts-reset-default-state {
+		pins = "gpio8";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	/* Speaker amplifier reset, downstream aw_reset_active */
+	amp_reset_default: amp-reset-default-state {
+		pins = "gpio125";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	/*
+	 * Primary MI2S to the speaker amplifier, downstream pri_i2s_*_active.
+	 * The amplifier is fed from data line 1 (gpio52, downstream
+	 * qcom,msm-mi2s-rx-lines = <2>); gpio51 (line 0) is its sense output.
+	 */
+	pri_mi2s_default: pri-mi2s-default-state {
+		sck-pins {
+			pins = "gpio49";
+			function = "pri_mi2s";
+			drive-strength = <4>;
+			bias-disable;
+		};
+
+		ws-pins {
+			pins = "gpio50";
+			function = "pri_mi2s_ws";
+			drive-strength = <4>;
+			bias-disable;
+		};
+
+		data-pins {
+			pins = "gpio52";
+			function = "pri_mi2s";
+			drive-strength = <4>;
+			bias-disable;
+		};
+	};
+
+	/* Haptics interrupt, downstream aw_irq_gpio_default (reset is gpio71) */
+	haptics_int_default: haptics-int-default-state {
+		pins = "gpio70";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+		input-enable;
+	};
+
+	/* Panel tearing-effect line, downstream sde_te_active */
+	mdp_vsync_te_active: mdp-vsync-te-active-state {
+		pins = "gpio10";
+		function = "mdp_vsync";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+};
+
+&ufs_mem_hc {
+	vcc-supply = <&vreg_l7c_2p95>;
+	vcc-max-microamp = <800000>;
+	vccq2-supply = <&vreg_s4a_1p8>;
+	vccq2-max-microamp = <800000>;
+
+	status = "okay";
+};
+
+&ufs_mem_phy {
+	vdda-phy-supply = <&vreg_l5a_0p88>;
+	vdda-pll-supply = <&vreg_l9a_1p2>;
+
+	status = "okay";
+};
+
+&usb_1 {
+	status = "okay";
+};
+
+&usb_1_dwc3 {
+	/* Role follows the PM7250B type-C port: gadget by default, host with an OTG cable */
+	dr_mode = "otg";
+	maximum-speed = "high-speed";
+};
+
+&usb_1_dwc3_hs_out {
+	remote-endpoint = <&pm7250b_hs_in>;
+};
+
+&usb_1_hsphy {
+	vdda-pll-supply = <&vreg_l5a_0p88>;
+	vdda18-supply = <&vreg_l12a_1p8>;
+	vdda33-supply = <&vreg_l2a_3p1>;
+
+	status = "okay";
+};
+
+&venus {
+	firmware-name = "qcom/sm7250/oneplus/avicii/venus.mdt";
+
+	status = "okay";
+};
+
+/* Volume keys: vol-up on PM8150L gpio5, vol-down on PM7250B gpio3 (active low) */
+/ {
+	gpio-keys {
+		compatible = "gpio-keys";
+		pinctrl-names = "default";
+		pinctrl-0 = <&key_vol_up_default>, <&key_vol_down_default>;
+
+		key-volume-up {
+			label = "Volume Up";
+			gpios = <&pm8150l_gpios 5 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_VOLUMEUP>;
+			debounce-interval = <15>;
+			wakeup-source;
+		};
+
+		key-volume-down {
+			label = "Volume Down";
+			gpios = <&pm7250b_gpios 3 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_VOLUMEDOWN>;
+			debounce-interval = <15>;
+			wakeup-source;
+		};
+	};
+};
+
+/*
+ * Alert slider: tri-state switch on three GPIOs, active low. Downstream
+ * tri_state_key driver reports state 1 when only gpio_key3 (tlmm 69) is
+ * low, state 2 for gpio_key2 (tlmm 83) and state 3 for gpio_key1
+ * (PM7250B gpio10). Top = silent, middle = vibrate, bottom = ring.
+ */
+/ {
+	alert-slider {
+		compatible = "gpio-keys";
+		label = "Alert slider";
+		pinctrl-names = "default";
+		pinctrl-0 = <&alert_slider_default>, <&alert_slider_pmic>;
+
+		switch-top {
+			label = "Silent";
+			linux,input-type = <EV_ABS>;
+			linux,code = <ABS_SND_PROFILE>;
+			linux,input-value = <SND_PROFILE_SILENT>;
+			gpios = <&tlmm 69 GPIO_ACTIVE_LOW>;
+			linux,can-disable;
+		};
+
+		switch-middle {
+			label = "Vibrate";
+			linux,input-type = <EV_ABS>;
+			linux,code = <ABS_SND_PROFILE>;
+			linux,input-value = <SND_PROFILE_VIBRATE>;
+			gpios = <&tlmm 83 GPIO_ACTIVE_LOW>;
+			linux,can-disable;
+		};
+
+		switch-bottom {
+			label = "Ring";
+			linux,input-type = <EV_ABS>;
+			linux,code = <ABS_SND_PROFILE>;
+			linux,input-value = <SND_PROFILE_RING>;
+			gpios = <&pm7250b_gpios 10 GPIO_ACTIVE_LOW>;
+			linux,can-disable;
+		};
+	};
+};
+
+&pon_pwrkey {
+	status = "okay";
+};
+
+&tlmm {
+	alert_slider_default: alert-slider-default-state {
+		pins = "gpio69", "gpio83";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+};
+
+&pm7250b_gpios {
+	alert_slider_pmic: alert-slider-pmic-state {
+		pins = "gpio10";
+		function = "normal";
+		input-enable;
+		output-disable;
+		power-source = <0>;
+	};
+};
+
+&pm8150l_gpios {
+	key_vol_up_default: key-vol-up-default-state {
+		pins = "gpio5";
+		function = "normal";
+		input-enable;
+		bias-pull-up;
+		power-source = <0>;
+	};
+};
+
+&pm7250b_gpios {
+	key_vol_down_default: key-vol-down-default-state {
+		pins = "gpio3";
+		function = "normal";
+		input-enable;
+		bias-pull-up;
+		power-source = <0>;
+	};
+};
+
+/* Battery pack: OnePlus gauge with bq27411 register layout (DEVICE_TYPE 0x0421), qupv3_se11_i2c at 100 kHz */
+&i2c11 {
+	clock-frequency = <100000>;
+
+	status = "okay";
+
+	battery_gauge: battery@55 {
+		compatible = "ti,bq27411";
+		reg = <0x55>;
+	};
+};
+
+/*
+ * Milestone 4: Wi-Fi (WCN3990 via ath10k_snoc, wlan_pd inside the modem).
+ *
+ * The modem is not started at boot (auto_boot is false): userspace starts it
+ * with "echo start > /sys/class/remoteproc/remoteproc0/state" once the root
+ * filesystem with the firmware is mounted.
+ */
+/ {
+	reserved-memory {
+		/*
+		 * Downstream: qcom,rmtfs_sharedmem (client 1, size 0x280000),
+		 * dynamically allocated, so the address is only handed to the
+		 * modem through the rmtfs QMI service. Place it in free RAM
+		 * between dfps_data_mem and kboot_uboot_logmem.
+		 */
+		rmtfs_mem: rmtfs {
+			compatible = "qcom,rmtfs-mem";
+			size = <0x0 0x280000>;
+			alloc-ranges = <0x0 0xa4000000 0x0 0x10000000>;
+			alignment = <0x0 0x400000>;
+			no-map;
+
+			qcom,client-id = <1>;
+			qcom,vmid = <15>; /* QCOM_SCM_VMID_MSS_MSA */
+		};
+	};
+};
+
+/*
+ * WLAN rails. Downstream icnss requests: cx-mx 0.752 V, xo 1.8 V,
+ * rfa 1.304 V, ch0/ch1 3.312 V. pm8150 l1/l14 are not WLAN-only as far as
+ * is known (the bootloader may leave them on and BT shares l14), so they are
+ * always-on; the pm8150l rails only feed WLAN/BT and are switchable.
+ */
+&apps_rsc {
+	regulators-2 {
+		compatible = "qcom,pm8150-rpmh-regulators";
+		qcom,pmic-id = "a";
+
+		/* Downstream: pm8150_l1 0.352 - 0.952 V, icnss asks 0.752 V */
+		vreg_l1a_0p75: ldo1 {
+			regulator-name = "vreg_l1a_0p75";
+			regulator-min-microvolt = <752000>;
+			regulator-max-microvolt = <752000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-boot-on;
+			regulator-always-on;
+		};
+
+		/* Downstream: pm8150_l14 1.616 - 1.984 V, icnss asks 1.8 V */
+		vreg_l14a_1p8: ldo14 {
+			regulator-name = "vreg_l14a_1p8";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-boot-on;
+			regulator-always-on;
+		};
+	};
+
+	regulators-3 {
+		compatible = "qcom,pm8150l-rpmh-regulators";
+		qcom,pmic-id = "c";
+
+		/* Downstream: pm8150a_l2 1.144 - 1.328 V, icnss asks 1.304 V */
+		vreg_l2c_1p3: ldo2 {
+			regulator-name = "vreg_l2c_1p3";
+			regulator-min-microvolt = <1304000>;
+			regulator-max-microvolt = <1304000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Downstream: pm8150a_l10 3.0 - 3.312 V, icnss asks 3.312 V */
+		vreg_l10c_3p3: ldo10 {
+			regulator-name = "vreg_l10c_3p3";
+			regulator-min-microvolt = <3312000>;
+			regulator-max-microvolt = <3312000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Downstream: pm8150a_l11 3.0 - 3.312 V, icnss asks 3.312 V */
+		vreg_l11c_3p3: ldo11 {
+			regulator-name = "vreg_l11c_3p3";
+			regulator-min-microvolt = <3312000>;
+			regulator-max-microvolt = <3312000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+	};
+};
+
+&cdsp {
+	/* split image: cdsp.mdt + cdsp.b00 ... in that directory */
+	firmware-name = "qcom/sm7250/oneplus/avicii/cdsp.mdt";
+
+	status = "okay";
+};
+
+&adsp {
+	/* split image: adsp.mdt + adsp.b00 ... in that directory */
+	firmware-name = "qcom/sm7250/oneplus/avicii/adsp.mdt";
+
+	status = "okay";
+};
+
+&mpss {
+	/* split image: modem.mdt + modem.b00 ... modem.b33 in that directory */
+	firmware-name = "qcom/sm7250/oneplus/avicii/modem.mdt";
+
+	status = "okay";
+};
+
+&wifi {
+	vdd-0.8-cx-mx-supply = <&vreg_l1a_0p75>;
+	vdd-1.8-xo-supply = <&vreg_l14a_1p8>;
+	vdd-1.3-rfa-supply = <&vreg_l2c_1p3>;
+	vdd-3.3-ch0-supply = <&vreg_l10c_3p3>;
+	vdd-3.3-ch1-supply = <&vreg_l11c_3p3>;
+
+	/* board data: ath10k/WCN3990/hw1.0/avicii/board-2.bin (or board.bin) */
+	firmware-name = "avicii";
+
+	status = "okay";
+};
+
+/* Charger status, charge inhibit (bypass charging) and charge limit */
+&pm7250b_charger {
+	power-supplies = <&battery_gauge>;
+
+	status = "okay";
+};
+
+/*
+ * USB-C port: PM7250B type-C controller (CC detection, role) and the SMB5 OTG
+ * boost as VBUS source. Downstream feeds the PD PHY from pm8150 l2.
+ */
+&pm7250b_typec {
+	vdd-pdphy-supply = <&vreg_l2a_3p1>;
+
+	status = "okay";
+
+	connector {
+		compatible = "usb-c-connector";
+
+		power-role = "dual";
+		data-role = "dual";
+		self-powered;
+
+		/* Plain Type-C (5 V, current advertisement); no PD negotiation yet */
+		typec-power-opmode = "default";
+		pd-disable;
+
+		vbus-supply = <&pm7250b_vbus>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				pm7250b_hs_in: endpoint {
+					remote-endpoint = <&usb_1_dwc3_hs_out>;
+				};
+			};
+		};
+	};
+};
+
+&pm7250b_vbus {
+	regulator-min-microamp = <500000>;
+	regulator-max-microamp = <1500000>;
+
+	status = "okay";
+};
+
+/*
+ * Touchscreen: Goodix GT9886 on downstream qupv3_se7_i2c (gpio6/7); panel
+ * coordinates 1080x2400 (touchpanel,panel-coords).
+ */
+&gpi_dma0 {
+	status = "okay";
+};
+
+&i2c1 {
+	clock-frequency = <400000>;
+
+	status = "okay";
+
+	touchscreen@5d {
+		compatible = "goodix,gt9886";
+		reg = <0x5d>;
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <9 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&tlmm 8 GPIO_ACTIVE_LOW>;
+
+		vdd-supply = <&vreg_l13a_3p0>;
+		vddio-supply = <&ts_vddio>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&ts_int_default>, <&ts_reset_default>;
+
+		touchscreen-size-x = <1080>;
+		touchscreen-size-y = <2400>;
+	};
+};
+
+/*
+ * Speaker amplifier bus: downstream qupv3_se9_i2c (gpio46/47)
+ */
+&i2c9 {
+	clock-frequency = <400000>;
+
+	status = "okay";
+
+	speaker_amp: audio-codec@34 {
+		compatible = "nxp,tfa9874";
+		reg = <0x34>;
+
+		/* Downstream pulses gpio125 high; it also answers while held high */
+		reset-gpios = <&tlmm 125 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&amp_reset_default>;
+
+		vddd-supply = <&vreg_s4a_1p8>;
+
+		#sound-dai-cells = <0>;
+	};
+};
+
+&i2c0 {
+	clock-frequency = <400000>;
+
+	status = "okay";
+
+	/*
+	 * Downstream aw8697_haptic@5A: reset gpio71, irq gpio70. The interrupt
+	 * is not described, its trigger type is not given downstream.
+	 */
+	haptics@5a {
+		compatible = "awinic,aw8697";
+		reg = <0x5a>;
+
+		reset-gpios = <&tlmm 71 GPIO_ACTIVE_LOW>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&haptics_int_default>;
+	};
+};
+
+&qupv3_id_0 {
+	status = "okay";
+};
+
+/*
+ * WCN3990 Bluetooth HCI, downstream qupv3_se5_4uart. Pins as on the working
+ * sdm845 WCN3990 boards: CTS pulled down and RX pulled up, so that a
+ * not-yet-driven CTS cannot hold off the host's TX and RX idles high while the
+ * chip is still booting (bias-disable on both left hci0 without answers).
+ */
+&tlmm {
+	bt_uart_cts_rx: bt-uart-cts-rx-state {
+		cts-pins {
+			pins = "gpio38";
+			function = "qup05";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+
+		rx-pins {
+			pins = "gpio41";
+			function = "qup05";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+
+	bt_uart_rts_tx: bt-uart-rts-tx-state {
+		rts-pins {
+			pins = "gpio39";
+			function = "qup05";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+
+		tx-pins {
+			pins = "gpio40";
+			function = "qup05";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+};
+
+&uart5 {
+	pinctrl-0 = <&bt_uart_cts_rx>, <&bt_uart_rts_tx>;
+	pinctrl-1 = <&bt_uart_cts_rx>, <&bt_uart_rts_tx>;
+	status = "okay";
+
+	bluetooth {
+		compatible = "qcom,wcn3990-bt";
+
+		vddio-supply = <&vreg_s4a_1p8>;
+		vddxo-supply = <&vreg_l14a_1p8>;
+		vddrf-supply = <&vreg_l2c_1p3>;
+		vddch0-supply = <&vreg_l10c_3p3>;
+
+		max-speed = <3200000>;
+	};
+};
+
+&q6afedai {
+	dai@16 {
+		reg = <PRIMARY_MI2S_RX>;
+		qcom,sd-lines = <1>;
+	};
+};
+
+&q6asmdai {
+	dai@0 {
+		reg = <MSM_FRONTEND_DAI_MULTIMEDIA1>;
+	};
+};
+
+&sound {
+	compatible = "qcom,sm8250-sndcard";
+	model = "OnePlus-Nord-TFA9874";
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&pri_mi2s_default>;
+
+	mm1-dai-link {
+		link-name = "MultiMedia1";
+
+		cpu {
+			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA1>;
+		};
+	};
+
+	primary-mi2s-dai-link {
+		link-name = "Primary MI2S Playback";
+
+		cpu {
+			sound-dai = <&q6afedai PRIMARY_MI2S_RX>;
+		};
+
+		platform {
+			sound-dai = <&q6routing>;
+		};
+
+		codec {
+			sound-dai = <&speaker_amp>;
+		};
+	};
+};
+
+/*
+ * Cameras. Downstream lito-oem-camera-avicii.dtsi describes six sensors;
+ * only the ultrawide (Hynix HI846, "qcom,cam-sensor@1", CSIPHY3, CCI0
+ * master 1) has a mainline driver. The rear main and macro parts are not
+ * identified, IMX616, GC5035 and GC8054 have no driver, so they are left
+ * out. The GC8054 (@5) shares reset gpio21, MCLK1 and CSIPHY3 with the
+ * HI846, so only one of the two can be used at a time.
+ */
+&apps_rsc {
+	regulators-4 {
+		compatible = "qcom,pm8150-rpmh-regulators";
+		qcom,pmic-id = "a";
+
+		/*
+		 * Downstream: pm8150_l17 1.8 V (cam_vio of every sensor), init
+		 * mode LPM (lito-regulators.dtsi:434-441).
+		 */
+		vreg_l17a_1p8: ldo17 {
+			regulator-name = "vreg_l17a_1p8";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/*
+		 * Downstream: pm8150_s5 1.664 - 2.04 V (lito-regulators.dtsi:52-61),
+		 * input of the pm8008 L6/L7.
+		 */
+		vreg_s5a_2p0: smps5 {
+			regulator-name = "vreg_s5a_2p0";
+			regulator-min-microvolt = <1664000>;
+			regulator-max-microvolt = <2040000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+	};
+
+	regulators-5 {
+		compatible = "qcom,pm8150l-rpmh-regulators";
+		qcom,pmic-id = "c";
+
+		/*
+		 * Downstream: pm8150a_s8 0.696 - 1.416 V
+		 * (lito-regulators.dtsi:553-562), input of the pm8008 L1/L2.
+		 * The vendor DT gives no operating point; 1.3 V keeps L1
+		 * (1.056 V) and L2 (1.104 V) above their 209 mV dropout
+		 * (lito.dtsi:4025-4034).
+		 */
+		vreg_s8c_1p3: smps8 {
+			regulator-name = "vreg_s8c_1p3";
+			regulator-min-microvolt = <1300000>;
+			regulator-max-microvolt = <1352000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/*
+		 * Downstream: pm8150a_bob 3.008 - 3.96 V
+		 * (lito-regulators.dtsi:767-785), input of the pm8008 L3-L5.
+		 */
+		vreg_bob: bob {
+			regulator-name = "vreg_bob";
+			regulator-min-microvolt = <3008000>;
+			regulator-max-microvolt = <3960000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_AUTO>;
+		};
+	};
+};
+
+&tlmm {
+	/* Downstream pm8008_active / pm8008_interrupt (lito-pinctrl.dtsi:1953-1985) */
+	pm8008_reset_default: pm8008-reset-default-state {
+		pins = "gpio144";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+
+	pm8008_int_default: pm8008-int-default-state {
+		pins = "gpio145";
+		function = "gpio";
+		bias-disable;
+		input-enable;
+	};
+
+	/* Downstream cam_sensor_rear_2_reset_active, lito-oem-camera-avicii.dtsi:1027 */
+	cam_ultrawide_reset_default: cam-ultrawide-reset-default-state {
+		pins = "gpio21";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+};
+
+/*
+ * PM8008 camera PMIC on the same bus as the amplifier: downstream
+ * pm8008_8/pm8008_9 on qupv3_se9_i2c (lito.dtsi:3929-3932), enable gpio144,
+ * interrupt gpio145 (lito.dtsi:4008-4015). L1P is the HI846 digital rail and
+ * L4P its analog rail.
+ */
+&i2c9 {
+	pm8008: pmic@8 {
+		compatible = "qcom,pm8008";
+		reg = <0x8>;
+
+		interrupts-extended = <&tlmm 145 IRQ_TYPE_EDGE_RISING>;
+		reset-gpios = <&tlmm 144 GPIO_ACTIVE_LOW>;
+
+		pinctrl-0 = <&pm8008_int_default>, <&pm8008_reset_default>;
+		pinctrl-names = "default";
+
+		vdd-l1-l2-supply = <&vreg_s8c_1p3>;
+		vdd-l3-l4-supply = <&vreg_bob>;
+		vdd-l5-supply = <&vreg_bob>;
+		vdd-l6-supply = <&vreg_s5a_2p0>;
+		vdd-l7-supply = <&vreg_s5a_2p0>;
+
+		gpio-controller;
+		#gpio-cells = <2>;
+		gpio-ranges = <&pm8008 0 0 2>;
+
+		interrupt-controller;
+		#interrupt-cells = <2>;
+
+		#thermal-sensor-cells = <0>;
+
+		/* Voltage ranges: pm8008.dtsi:64-125 narrowed by lito.dtsi:4025-4063 */
+		regulators {
+			vreg_l1p: ldo1 {
+				regulator-name = "vreg_l1p";
+				regulator-min-microvolt = <528000>;
+				regulator-max-microvolt = <1056000>;
+			};
+
+			vreg_l2p: ldo2 {
+				regulator-name = "vreg_l2p";
+				regulator-min-microvolt = <528000>;
+				regulator-max-microvolt = <1104000>;
+			};
+
+			vreg_l3p: ldo3 {
+				regulator-name = "vreg_l3p";
+				regulator-min-microvolt = <2800000>;
+				regulator-max-microvolt = <2800000>;
+			};
+
+			vreg_l4p: ldo4 {
+				regulator-name = "vreg_l4p";
+				regulator-min-microvolt = <2800000>;
+				regulator-max-microvolt = <2904000>;
+			};
+
+			vreg_l5p: ldo5 {
+				regulator-name = "vreg_l5p";
+				regulator-min-microvolt = <2800000>;
+				regulator-max-microvolt = <2800000>;
+			};
+
+			vreg_l6p: ldo6 {
+				regulator-name = "vreg_l6p";
+				regulator-min-microvolt = <1500000>;
+				regulator-max-microvolt = <1800000>;
+			};
+
+			vreg_l7p: ldo7 {
+				regulator-name = "vreg_l7p";
+				regulator-min-microvolt = <1500000>;
+				regulator-max-microvolt = <1800000>;
+			};
+		};
+	};
+};
+
+&cci0 {
+	status = "okay";
+};
+
+/* Downstream "cci-master = <1>" of qcom,cam-sensor@1 (gpio19/20) */
+&cci0_i2c1 {
+	/*
+	 * Ultrawide, Hynix HI846 8 MP (lito-oem-camera-avicii.dtsi:336-380).
+	 * The vendor DT gives no I2C address; 0x20 is the HI846 default
+	 * (hynix,hi846 binding).
+	 */
+	camera@20 {
+		compatible = "hynix,hi846";
+		reg = <0x20>;
+
+		/* MCLK1 (gpio14), shared with the GC8054 alternative */
+		clocks = <&camcc CAM_CC_MCLK1_CLK>;
+		assigned-clocks = <&camcc CAM_CC_MCLK1_CLK>;
+		assigned-clock-rates = <24000000>;
+
+		reset-gpios = <&tlmm 21 GPIO_ACTIVE_LOW>;
+
+		pinctrl-0 = <&cam_mclk1_default>, <&cam_ultrawide_reset_default>;
+		pinctrl-1 = <&cam_mclk1_sleep>;
+		pinctrl-names = "default", "sleep";
+
+		vddio-supply = <&vreg_l17a_1p8>;
+		vdda-supply = <&vreg_l4p>;
+		vddd-supply = <&vreg_l1p>;
+
+		orientation = <1>;
+
+		port {
+			hi846_ep: endpoint {
+				data-lanes = <1 2 3 4>;
+				link-frequencies = /bits/ 64 <80000000 200000000>;
+				remote-endpoint = <&camss_csiphy3_ep>;
+			};
+		};
+	};
+};
+
+&camss {
+	vdd-csiphy-0p9-supply = <&vreg_l5a_0p88>;
+
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@3 {
+			reg = <3>;
+
+			camss_csiphy3_ep: endpoint {
+				data-lanes = <0 1 2 3>;
+				remote-endpoint = <&hi846_ep>;
+			};
+		};
+	};
+};

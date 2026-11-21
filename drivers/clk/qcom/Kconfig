@@ -1209,6 +1209,15 @@ config SM_CAMCC_8150
 	  Say Y if you want to support camera devices and functionality such as
 	  capturing pictures.
 
+config SM_CAMCC_7250
+	tristate "SM7250 Camera Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select SM_GCC_7250
+	default m if ARCH_QCOM
+	help
+	  Support for the camera clock controller on SM7250 devices.
+	  Say Y if you want to support camera devices and camera functionality.
+
 config SM_CAMCC_8250
 	tristate "SM8250 Camera Clock Controller"
 	depends on ARM64 || COMPILE_TEST
@@ -1288,6 +1297,16 @@ config SM_DISPCC_7150
 	help
 	  Support for the display clock controller on Qualcomm Technologies, Inc
 	  SM7150 devices.
+	  Say Y if you want to support display devices and functionality such as
+	  splash screen.
+
+config SM_DISPCC_7250
+	tristate "SM7250 Display Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	depends on SM_GCC_7250
+	help
+	  Support for the display clock controller on Qualcomm Technologies, Inc
+	  SM7250 devices.
 	  Say Y if you want to support display devices and functionality such as
 	  splash screen.
 
@@ -1415,6 +1434,15 @@ config SM_GCC_7150
 	  Support for the global clock controller on SM7150 devices.
 	  Say Y if you want to use peripheral devices such as UART,
 	  SPI, I2C, USB, SD/UFS, PCIe etc.
+
+config SM_GCC_7250
+	tristate "SM7250 Global Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select QCOM_GDSC
+	help
+	  Support for the global clock controller on SM7250 devices.
+	  Say Y if you want to use peripheral devices such as UART,
+	  SPI, I2C, USB, SD/UFS etc.
 
 config SM_GCC_MILOS
 	tristate "Milos Global Clock Controller"
@@ -1552,6 +1580,15 @@ config SM_GPUCC_8150
 	  Say Y if you want to support graphics controller devices and
 	  functionality such as 3D graphics.
 
+config SM_GPUCC_7250
+	tristate "SM7250 Graphics Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	depends on SM_GCC_7250
+	help
+	  Support for the graphics clock controller on SM7250 devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
+
 config SM_GPUCC_8250
 	tristate "SM8250 Graphics Clock Controller"
 	depends on ARM64 || COMPILE_TEST
@@ -1681,6 +1718,17 @@ config SM_VIDEOCC_MILOS
 	  Milos devices.
 	  Say Y if you want to support video devices and functionality such as
 	  video encode/decode.
+
+config SM_VIDEOCC_7250
+	tristate "SM7250 Video Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	depends on SM_GCC_7250
+	select QCOM_GDSC
+	help
+	  Support for the video clock controller on Qualcomm Technologies, Inc
+	  SM7250 devices.
+	  Say Y if you want to support video devices and functionality such as
+	  video encode and decode.
 
 config SM_VIDEOCC_8150
 	tristate "SM8150 Video Clock Controller"

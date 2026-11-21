@@ -911,6 +911,27 @@ config INPUT_DRV260X_HAPTICS
 	  To compile this driver as a module, choose M here: the
 	  module will be called drv260x-haptics.
 
+config INPUT_DRV2624
+	tristate "TI DRV2624 haptic driver"
+	depends on I2C
+	select INPUT_FF_MEMLESS
+	select REGMAP_I2C
+	help
+	  Say Y here to enable the TI DRV2624 haptic driver (RTP mode).
+
+config INPUT_AW8697_HAPTICS
+	tristate "Awinic AW8697 haptics support"
+	depends on INPUT && I2C
+	select INPUT_FF_MEMLESS
+	select REGMAP_I2C
+	help
+	  Say Y to enable support for the Awinic AW8697 LRA haptic driver
+	  as a force-feedback rumble device. Only the closed-loop continuous
+	  playback mode is supported.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called aw8697.
+
 config INPUT_DRV2665_HAPTICS
 	tristate "TI DRV2665 haptics support"
 	depends on INPUT && I2C
